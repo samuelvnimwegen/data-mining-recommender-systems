@@ -23,7 +23,7 @@ import pandas as pd
 
 
 class RatingsSplitter:
-    """Object oriented per-user train/validation splitter.
+    """Per-user train/validation splitter.
 
     This class implements a reproducible per-user split strategy. It moves
     ``floor(val_fraction * n)`` interactions per-user to validation, ensuring
