@@ -39,6 +39,7 @@ Settings are stored in `src/configs/config.py` in the `CleanerConfig` dataclass.
 - `notebooks/03_itemknn_usage.ipynb`: Shows ItemKNN training, prediction, and top-N recommendations.
 - `notebooks/04_svd_usage.ipynb`: Shows SVD training, prediction, and top-N recommendations.
 - `notebooks/05_lightfm_usage.ipynb`: Shows LightFM hybrid training with engineered item features.
+- `notebooks/06_ratings_splitter_usage.ipynb`: Shows how to create and save the deterministic 70/30 train/validation split.
 
 ## Quick run
 
@@ -88,12 +89,13 @@ python -m pytest tests/test_surprise_models.py -q
 
 ## Train/Validation splitting
 
-This repo includes a deterministic per-user 70/30 splitting function implemented in `src/dataloader/splitter.py`.
+This repo includes a deterministic per-user 70/30 splitting function implemented in `src/dataloader/ratings_splitter.py`.
 
 Key points:
-- For each eligible user with n interactions, we move floor(0.30 * n) interactions to the validation set and keep the rest for training.
+- For each selected eligible user with n interactions, we move floor(0.30 * n) interactions to the validation set and keep the rest for training.
 - Users with fewer than 2 interactions are excluded from both train and validation sets, as low-interaction users are not useful for offline evaluation.
-- For users where floor(0.30 * n) would equal n (e.g., n=0), we clamp to ensure at least one training instance remains.
+- You can cap validation to a subset of users with `max_validation_users` (for example `50`) so most user histories stay fully in training.
+- For users where floor(0.30 * n) would equal n, we clamp to ensure at least one training instance remains.
 - The split is random but reproducible via a `seed` parameter.
 
 To use in scripts and notebooks:
@@ -101,5 +103,11 @@ To use in scripts and notebooks:
 ```python
 from src.dataloader.ratings_splitter import split_ratings_train_val
 
-train_df, val_df = split_ratings_train_val(ratings_df, val_fraction=0.3, min_interactions=2, seed=42)
+train_df, val_df = split_ratings_train_val(
+    ratings_df,
+    val_fraction=0.3,
+    min_interactions=2,
+    seed=42,
+    max_validation_users=50,
+)
 ```

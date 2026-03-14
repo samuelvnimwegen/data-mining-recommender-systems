@@ -38,3 +38,41 @@ def test_splitter_basic_behaviour() -> None:
     # For user 2, floor(0.3*2)=0 => all remain in train (but ensure min_interactions=2 keeps user)
     assert sum(train_df.userId == 2) == 2
     assert sum(val_df.userId == 2) == 0
+
+
+def test_splitter_limits_validation_users() -> None:
+    """Tests that only a fixed number of users are split into validation."""
+    # Build users with enough interactions so each can contribute validation rows.
+    rows = []
+    for user_identifier in range(1, 11):
+        for movie_offset in range(10):
+            rows.append(
+                {
+                    "userId": user_identifier,
+                    "movieId": (user_identifier * 100) + movie_offset,
+                    "rating": 4.0,
+                }
+            )
+
+    ratings_dataframe = pd.DataFrame(rows)
+
+    train_dataframe, validation_dataframe = split_ratings_train_val(
+        ratings_dataframe=ratings_dataframe,
+        val_fraction=0.3,
+        min_interactions=2,
+        seed=7,
+        max_validation_users=3,
+    )
+
+    # Exactly three users should have validation rows.
+    users_in_validation = set(validation_dataframe["userId"].tolist())
+    assert len(users_in_validation) == 3
+
+    # Users not in validation should keep all ten rows in train.
+    train_counts_by_user = train_dataframe.groupby("userId").size().to_dict()
+    for user_identifier in range(1, 11):
+        if user_identifier in users_in_validation:
+            assert train_counts_by_user[user_identifier] == 7
+        else:
+            assert train_counts_by_user[user_identifier] == 10
+
