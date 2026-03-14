@@ -110,7 +110,14 @@ def main(command_line_arguments: list[str] | None = None) -> int:
     Returns:
         int: Process exit code.
     """
-    workspace_root_path = Path(__file__).resolve().parent
+    # Resolve the repository root. When main is executed via import hooks or tests,
+    # __file__ may not be defined (NameError). Fall back to current working
+    # directory which is the repository root during pytest runs.
+    try:
+        workspace_root_path = Path(__file__).resolve().parent
+    except NameError:  # pragma: no cover - exercised in tests
+        workspace_root_path = Path.cwd()
+
     argument_parser = build_argument_parser()
     parsed_arguments = argument_parser.parse_args(command_line_arguments)
 
