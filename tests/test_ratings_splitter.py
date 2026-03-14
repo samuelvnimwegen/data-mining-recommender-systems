@@ -75,4 +75,3 @@ def test_splitter_limits_validation_users() -> None:
             assert train_counts_by_user[user_identifier] == 7
         else:
             assert train_counts_by_user[user_identifier] == 10
-

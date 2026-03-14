@@ -17,8 +17,6 @@ functional helper `split_ratings_train_val` for backward compatibility.
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import math
 import numpy as np
 import pandas as pd
@@ -87,7 +85,7 @@ class RatingsSplitter:
                 ``userId``, ``movieId`` and ``rating``.
 
         Returns:
-            tuple[pd.DataFrame, pd.DataFrame]: Tuple ``(train_df, val_df)``.
+            tuple[pd.DataFrame, pd.DataFrame]: tuple ``(train_df, val_df)``.
 
         Raises:
             ValueError: If required columns are missing.
@@ -112,7 +110,9 @@ class RatingsSplitter:
         # Pick which users will have rows moved to validation.
         users_with_holdout = user_counts[user_counts >= self.min_interactions]
         users_with_holdout = users_with_holdout[
-            users_with_holdout.apply(lambda interaction_count: math.floor(self.val_fraction * int(interaction_count)) > 0)
+            users_with_holdout.apply(
+                lambda interaction_count: math.floor(self.val_fraction * int(interaction_count)) > 0
+            )
         ]
         holdout_user_ids = users_with_holdout.index.to_numpy(dtype=int)
         if self.max_validation_users is not None and len(holdout_user_ids) > self.max_validation_users:
@@ -167,7 +167,7 @@ def split_ratings_train_val(
     min_interactions: int = 2,
     seed: int = 42,
     max_validation_users: int | None = None,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Compatibility wrapper that uses :class:`RatingsSplitter`.
 
     Args:
@@ -178,7 +178,7 @@ def split_ratings_train_val(
         max_validation_users: Maximum number of users to split into validation.
 
     Returns:
-        Tuple[pd.DataFrame, pd.DataFrame]: Split train and validation dataframes.
+        tuple[pd.DataFrame, pd.DataFrame]: Split train and validation dataframes.
     """
     splitter = RatingsSplitter(
         val_fraction=val_fraction,
