@@ -1,6 +1,6 @@
 # Data Mining Recommender Systems
 
-This project includes a dataset cleaning pipeline and Surprise-based recommender models.
+This project includes a dataset cleaning pipeline and recommender models based on Surprise and LightFM.
 
 ## CI
 
@@ -36,6 +36,9 @@ Settings are stored in `src/configs/config.py` in the `CleanerConfig` dataclass.
 
 - `notebooks/01_config_usage.ipynb`: Shows how `CleanerConfig` is created and validated.
 - `notebooks/02_dataset_cleaner_usage.ipynb`: Shows end-to-end `DatasetCleaner` usage and reports.
+- `notebooks/03_itemknn_usage.ipynb`: Shows ItemKNN training, prediction, and top-N recommendations.
+- `notebooks/04_svd_usage.ipynb`: Shows SVD training, prediction, and top-N recommendations.
+- `notebooks/05_lightfm_usage.ipynb`: Shows LightFM hybrid training with engineered item features.
 
 ## Quick run
 
@@ -54,16 +57,28 @@ Outputs are written to `data/processed/` by default.
 
 ## Models
 
-Surprise model wrappers are implemented in `src/models/`:
+Model wrappers are implemented in `src/models/`:
 
 - `src/models/item_knn_model.py`: Item-based collaborative filtering (`KNNBasic`, `user_based=False`).
 - `src/models/svd_model.py`: Matrix factorization (`SVD`).
+- `src/models/lightfm_model.py`: Hybrid recommender (`LightFM`) using engineered item features.
 
-Both models expose a shared API:
+Both Surprise wrappers expose:
 
 - `fit(ratings_dataframe)`
 - `predict_rating(user_identifier, movie_identifier)`
 - `recommend_top_n(user_identifier, number_of_recommendations)`
+
+The LightFM wrapper exposes:
+
+- `fit(ratings_dataframe, movies_dataframe)`
+- `predict_rating(user_identifier, movie_identifier)`
+- `recommend_top_n(user_identifier, number_of_recommendations)`
+
+Compatibility note:
+
+- `lightfm` currently builds cleanly on Python versions below 3.12 in this project setup.
+- On Python 3.12, LightFM tests are auto-skipped if the package is unavailable.
 
 ## Quick model test run
 

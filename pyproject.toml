@@ -8,9 +8,9 @@ dependencies = [
     "apyori~=1.1.2",
     "ipykernel~=7.2.0",
     "matplotlib~=3.10.8",
-    "mlxtend~=0.24.0",
+    "mlxtend<0.24.0",
     "networkx~=3.6.1",
-    "numpy~=1.26.4",
+    "numpy==1.26.4",
     "pandas~=3.0.1",
     "scikit-learn~=1.8.0",
     "scikit-surprise~=1.1.4",
@@ -18,6 +18,8 @@ dependencies = [
     "seaborn~=0.13.2",
     "tqdm~=4.67.3",
     "pytest~=8.4.0",
+    "lightfm @ git+https://github.com/daviddavo/lightfm",
+    "ruff~=0.15.6",
 ]
 
 

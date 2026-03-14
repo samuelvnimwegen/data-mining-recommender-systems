@@ -28,11 +28,12 @@ class BaseModel(ABC):
         self.maximum_rating_value: float = maximum_rating_value
 
     @abstractmethod
-    def fit(self, ratings_dataframe: pd.DataFrame) -> None:
-        """Fits the model on user-item-rating data.
+    def fit(self, ratings_dataframe: pd.DataFrame, movies_dataframe: pd.DataFrame | None = None) -> None:
+        """Fits the model on rating data and optional movie feature data.
 
         Args:
             ratings_dataframe: DataFrame with rating interactions.
+            movies_dataframe: Optional DataFrame with movie metadata features.
         """
 
     @abstractmethod

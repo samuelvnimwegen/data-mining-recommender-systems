@@ -56,12 +56,15 @@ class SVDModel(BaseModel):
             verbose=False,
         )
 
-    def fit(self, ratings_dataframe: pd.DataFrame) -> None:
+    def fit(self, ratings_dataframe: pd.DataFrame, movies_dataframe: pd.DataFrame | None = None) -> None:
         """Fits SVD model on full ratings data.
 
         Args:
             ratings_dataframe: DataFrame with userId, movieId, rating.
+            movies_dataframe: Optional movie features dataframe (unused).
         """
+        # Ignore movies_dataframe for pure Surprise SVD training.
+        _ = movies_dataframe
         self.trainset = build_trainset_from_dataframe(
             ratings_dataframe=ratings_dataframe,
             minimum_rating_value=self.minimum_rating_value,
