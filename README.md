@@ -85,3 +85,21 @@ Compatibility note:
 ```bash
 python -m pytest tests/test_surprise_models.py -q
 ```
+
+## Train/Validation splitting
+
+This repo includes a deterministic per-user 70/30 splitting function implemented in `src/dataloader/splitter.py`.
+
+Key points:
+- For each eligible user with n interactions, we move floor(0.30 * n) interactions to the validation set and keep the rest for training.
+- Users with fewer than 2 interactions are excluded from both train and validation sets, as low-interaction users are not useful for offline evaluation.
+- For users where floor(0.30 * n) would equal n (e.g., n=0), we clamp to ensure at least one training instance remains.
+- The split is random but reproducible via a `seed` parameter.
+
+To use in scripts and notebooks:
+
+```python
+from src.dataloader.ratings_splitter import split_ratings_train_val
+
+train_df, val_df = split_ratings_train_val(ratings_df, val_fraction=0.3, min_interactions=2, seed=42)
+```
