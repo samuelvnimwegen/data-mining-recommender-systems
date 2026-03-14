@@ -1,6 +1,6 @@
 # Data Mining Recommender Systems
 
-This project includes a dataset cleaning pipeline for the recommender task.
+This project includes a dataset cleaning pipeline and Surprise-based recommender models.
 
 ## CI
 
@@ -51,3 +51,22 @@ python main.py --disable-time-decay --output-dir data/processed/custom
 ```
 
 Outputs are written to `data/processed/` by default.
+
+## Models
+
+Surprise model wrappers are implemented in `src/models/`:
+
+- `src/models/item_knn_model.py`: Item-based collaborative filtering (`KNNBasic`, `user_based=False`).
+- `src/models/svd_model.py`: Matrix factorization (`SVD`).
+
+Both models expose a shared API:
+
+- `fit(ratings_dataframe)`
+- `predict_rating(user_identifier, movie_identifier)`
+- `recommend_top_n(user_identifier, number_of_recommendations)`
+
+## Quick model test run
+
+```bash
+python -m pytest tests/test_surprise_models.py -q
+```
