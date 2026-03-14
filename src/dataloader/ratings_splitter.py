@@ -13,6 +13,7 @@ The split strategy:
 This module exposes a class-based API `RatingsSplitter` and preserves the
 functional helper `split_ratings_train_val` for backward compatibility.
 """
+
 from __future__ import annotations
 
 from typing import Tuple
@@ -62,7 +63,7 @@ class RatingsSplitter:
         self.min_interactions: int = min_interactions
         self.seed: int = seed
 
-    def split(self, ratings_dataframe: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def split(self, ratings_dataframe: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Split ratings into train and validation dataframes.
 
         This method implements the same behaviour as the previous

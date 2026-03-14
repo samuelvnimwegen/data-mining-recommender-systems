@@ -8,6 +8,10 @@ from src.dataloader.ratings_splitter import split_ratings_train_val
 
 
 def test_splitter_basic_behaviour() -> None:
+    """Tests the basic behavior of the splitter.
+
+    Including dropping users with too few interactions and correct splitting of users that qualify.
+    """
     # Create synthetic data: user 1 has 10 interactions, user 2 has 2, user3 has 1 (should be dropped)
     rows = []
     for uid in [1]:
@@ -34,4 +38,3 @@ def test_splitter_basic_behaviour() -> None:
     # For user 2, floor(0.3*2)=0 => all remain in train (but ensure min_interactions=2 keeps user)
     assert sum(train_df.userId == 2) == 2
     assert sum(val_df.userId == 2) == 0
-
