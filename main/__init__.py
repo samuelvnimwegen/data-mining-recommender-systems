@@ -3,6 +3,7 @@
 This module dynamically loads the top-level `main.py` file and re-exports
 its symbols so tests that do `from main import main` can import reliably.
 """
+
 from __future__ import annotations
 
 from importlib import util
@@ -31,4 +32,3 @@ build_argument_parser = getattr(_module, "build_argument_parser", None)
 create_cleaner_config_from_arguments = getattr(_module, "create_cleaner_config_from_arguments", None)
 
 __all__ = ["main", "build_argument_parser", "create_cleaner_config_from_arguments"]
-
