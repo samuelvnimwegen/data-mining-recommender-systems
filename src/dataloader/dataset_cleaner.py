@@ -77,6 +77,7 @@ class DatasetCleaner:
 
     def __post_init__(self) -> None:
         """Validates input paths from the cleaner config."""
+        # Ensure input files exist early to avoid long runs later.
         if not self.cleaner_config.movies_csv_path.exists():
             raise ValueError(f"Movies file does not exist: {self.cleaner_config.movies_csv_path}")
         if not self.cleaner_config.ratings_csv_path.exists():
@@ -88,6 +89,7 @@ class DatasetCleaner:
         Returns:
             tuple[pd.DataFrame, pd.DataFrame]: Movies and ratings dataframes.
         """
+        # Read CSVs into memory for processing.
         movies_dataframe = pd.read_csv(self.cleaner_config.movies_csv_path)
         ratings_dataframe = pd.read_csv(self.cleaner_config.ratings_csv_path)
         return movies_dataframe, ratings_dataframe
@@ -113,6 +115,7 @@ class DatasetCleaner:
             ratings_input_rows=len(raw_ratings_dataframe),
         )
 
+        # Clean movies first to define valid movie ids for ratings.
         cleaned_movies_dataframe = self._clean_movies_dataframe(raw_movies_dataframe, profile_report)
         cleaned_ratings_dataframe = self._clean_ratings_dataframe(
             ratings_dataframe=raw_ratings_dataframe,
@@ -120,6 +123,7 @@ class DatasetCleaner:
             profile_report=profile_report,
         )
 
+        # Enforce profile thresholds if strict mode is enabled.
         self._validate_profile_thresholds(profile_report)
         return cleaned_movies_dataframe, cleaned_ratings_dataframe, profile_report
 
@@ -169,6 +173,7 @@ class DatasetCleaner:
             if output_directory_path is not None
             else self.cleaner_config.output_directory_path
         )
+        # Create output folder if missing.
         resolved_output_directory_path.mkdir(parents=True, exist_ok=True)
 
         movies_output_path = resolved_output_directory_path / movies_output_file_name
@@ -201,23 +206,29 @@ class DatasetCleaner:
 
         cleaned_movies_dataframe = movies_dataframe.copy()
 
+        # Drop rows missing the key identifiers.
         before_rows = len(cleaned_movies_dataframe)
         cleaned_movies_dataframe = cleaned_movies_dataframe.dropna(subset=["movieId", "title"]).copy()
         profile_report.movies_rows_removed_missing = before_rows - len(cleaned_movies_dataframe)
 
+        # Ensure genres is not null so downstream text ops work.
         cleaned_movies_dataframe["genres"] = cleaned_movies_dataframe["genres"].fillna("(no genres listed)")
 
+        # Convert movieId to numeric and drop invalid ids.
         before_rows = len(cleaned_movies_dataframe)
         cleaned_movies_dataframe["movieId"] = pd.to_numeric(cleaned_movies_dataframe["movieId"], errors="coerce")
         cleaned_movies_dataframe = cleaned_movies_dataframe.dropna(subset=["movieId"]).copy()
         profile_report.movies_rows_removed_invalid_movie_id = before_rows - len(cleaned_movies_dataframe)
 
+        # Cast movieId to integer type after validation.
         cleaned_movies_dataframe["movieId"] = cleaned_movies_dataframe["movieId"].astype(int)
 
+        # Remove duplicate movieId rows keeping first occurrence.
         before_rows = len(cleaned_movies_dataframe)
         cleaned_movies_dataframe = cleaned_movies_dataframe.drop_duplicates(subset=["movieId"], keep="first")
         profile_report.movies_rows_removed_duplicates = before_rows - len(cleaned_movies_dataframe)
 
+        # Extract release year from title when present in parentheses.
         release_year_series = cleaned_movies_dataframe["title"].str.extract(r"\((\d{4})\)\s*$", expand=False)
         cleaned_movies_dataframe["release_year"] = pd.to_numeric(release_year_series, errors="coerce")
 
@@ -226,10 +237,12 @@ class DatasetCleaner:
             cleaned_movies_dataframe["title"].str.replace(r"\s*\(\d{4}\)\s*$", "", regex=True).str.strip()
         )
 
+        # Expand pipe-separated genres to binary indicator columns.
         genre_indicator_dataframe = cleaned_movies_dataframe["genres"].str.get_dummies(sep="|")
         genre_indicator_dataframe = genre_indicator_dataframe.rename(columns=lambda column_name: f"genre_{column_name}")
         cleaned_movies_dataframe = pd.concat([cleaned_movies_dataframe, genre_indicator_dataframe], axis=1)
 
+        # Optionally add TF-IDF genre features for more nuanced weights.
         if self.cleaner_config.enable_tfidf_features:
             tfidf_feature_dataframe = self._build_tfidf_genre_features(
                 genres_series=cleaned_movies_dataframe["genres"],
@@ -265,12 +278,14 @@ class DatasetCleaner:
 
         cleaned_ratings_dataframe = ratings_dataframe.copy()
 
+        # Drop rows missing required rating fields.
         before_rows = len(cleaned_ratings_dataframe)
         cleaned_ratings_dataframe = cleaned_ratings_dataframe.dropna(
             subset=["userId", "movieId", "rating", "timestamp"]
         ).copy()
         profile_report.ratings_rows_removed_missing = before_rows - len(cleaned_ratings_dataframe)
 
+        # Coerce numeric fields and drop rows that turned invalid.
         before_rows = len(cleaned_ratings_dataframe)
         for numeric_column_name in ["userId", "movieId", "rating", "timestamp"]:
             cleaned_ratings_dataframe[numeric_column_name] = pd.to_numeric(
@@ -282,16 +297,19 @@ class DatasetCleaner:
         ).copy()
         profile_report.ratings_rows_removed_invalid_numeric = before_rows - len(cleaned_ratings_dataframe)
 
+        # Cast numeric types after validation.
         cleaned_ratings_dataframe["userId"] = cleaned_ratings_dataframe["userId"].astype(int)
         cleaned_ratings_dataframe["movieId"] = cleaned_ratings_dataframe["movieId"].astype(int)
         cleaned_ratings_dataframe["timestamp"] = cleaned_ratings_dataframe["timestamp"].astype(np.int64)
 
+        # Enforce rating scale bounds.
         before_rows = len(cleaned_ratings_dataframe)
         cleaned_ratings_dataframe = cleaned_ratings_dataframe[
             cleaned_ratings_dataframe["rating"].between(self.RATING_MINIMUM, self.RATING_MAXIMUM)
         ].copy()
         profile_report.ratings_rows_removed_invalid_scale = before_rows - len(cleaned_ratings_dataframe)
 
+        # Remove orphan ratings referencing missing movies.
         valid_movie_id_set = set(valid_movie_ids.astype(int).tolist())
         before_rows = len(cleaned_ratings_dataframe)
         cleaned_ratings_dataframe = cleaned_ratings_dataframe[
@@ -299,6 +317,7 @@ class DatasetCleaner:
         ].copy()
         profile_report.orphan_ratings_removed = before_rows - len(cleaned_ratings_dataframe)
 
+        # Keep last rating for same user/movie pair (most recent by timestamp).
         before_rows = len(cleaned_ratings_dataframe)
         cleaned_ratings_dataframe = cleaned_ratings_dataframe.sort_values("timestamp")
         cleaned_ratings_dataframe = cleaned_ratings_dataframe.drop_duplicates(
@@ -307,6 +326,7 @@ class DatasetCleaner:
         )
         profile_report.duplicate_ratings_removed = before_rows - len(cleaned_ratings_dataframe)
 
+        # Convert timestamp to datetime and extract time features.
         cleaned_ratings_dataframe["rating_datetime"] = pd.to_datetime(
             cleaned_ratings_dataframe["timestamp"],
             unit="s",
@@ -316,12 +336,14 @@ class DatasetCleaner:
         cleaned_ratings_dataframe["rating_month"] = cleaned_ratings_dataframe["rating_datetime"].dt.month
         cleaned_ratings_dataframe["rating_day_of_week"] = cleaned_ratings_dataframe["rating_datetime"].dt.dayofweek
 
+        # Mean-center ratings per user to reduce user bias.
         user_mean_rating_series = cleaned_ratings_dataframe.groupby("userId")["rating"].transform("mean")
         cleaned_ratings_dataframe["user_mean_rating"] = user_mean_rating_series
         cleaned_ratings_dataframe["rating_mean_centered"] = (
             cleaned_ratings_dataframe["rating"] - cleaned_ratings_dataframe["user_mean_rating"]
         )
 
+        # Optionally compute time-decay weights to prefer recent ratings.
         if self.cleaner_config.enable_time_decay:
             cleaned_ratings_dataframe["time_decay_weight"] = self._calculate_time_decay_weights(
                 timestamp_series=cleaned_ratings_dataframe["timestamp"]
@@ -347,6 +369,7 @@ class DatasetCleaner:
         Returns:
             pd.DataFrame: TF-IDF dataframe with prefixed column names.
         """
+        # TF-IDF gives statistical weight to rarer genres vs common genres.
         tfidf_vectorizer = TfidfVectorizer(tokenizer=self._genre_tokenizer, token_pattern=None)
         tfidf_matrix = tfidf_vectorizer.fit_transform(genres_series.fillna(""))
         tfidf_feature_names = [
@@ -364,7 +387,9 @@ class DatasetCleaner:
         Returns:
             list[str]: Genre tokens.
         """
+        # Split on pipe and normalize to lower-case tokens.
         tokens = [genre_name.strip().lower() for genre_name in raw_genre_text.split("|")]
+        # Remove empty and placeholder tokens.
         return [token for token in tokens if token and token != "(no genres listed)"]
 
     def _calculate_time_decay_weights(self, timestamp_series: pd.Series) -> pd.Series:
@@ -376,6 +401,7 @@ class DatasetCleaner:
         Returns:
             pd.Series: Decay weight per rating row.
         """
+        # Use the newest rating as the time anchor.
         newest_timestamp_value = timestamp_series.max()
         rating_age_days_series = (newest_timestamp_value - timestamp_series) / 86_400.0
 
@@ -392,6 +418,7 @@ class DatasetCleaner:
         Raises:
             ValueError: If strict mode is enabled and a limit is passed.
         """
+        # Skip checks when strict profiling is not enabled.
         if not self.cleaner_config.enable_strict_profile:
             return
 
