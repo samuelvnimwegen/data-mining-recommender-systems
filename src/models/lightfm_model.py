@@ -100,22 +100,23 @@ class LightFMHybridModel(BaseModel):
         if filtered_ratings_dataframe.empty:
             raise ValueError("No overlapping movieId values between ratings and movies data.")
 
-        filtered_movies_dataframe = movies_dataframe[movies_dataframe["movieId"].astype(int).isin(
-            set(filtered_ratings_dataframe["movieId"].astype(int).tolist())
-        )].copy()
+        filtered_movies_dataframe = movies_dataframe[
+            movies_dataframe["movieId"]
+            .astype(int)
+            .isin(set(filtered_ratings_dataframe["movieId"].astype(int).tolist()))
+        ].copy()
 
         feature_column_names = self._select_item_feature_columns(filtered_movies_dataframe)
         prepared_movies_dataframe = self._prepare_feature_dataframe(filtered_movies_dataframe, feature_column_names)
 
         self.dataset = Dataset()
-        user_identifier_strings = sorted(
-            filtered_ratings_dataframe["userId"].astype(int).astype(str).unique().tolist()
-        )
+        user_identifier_strings = sorted(filtered_ratings_dataframe["userId"].astype(int).astype(str).unique().tolist())
         item_identifier_strings = sorted(
             filtered_ratings_dataframe["movieId"].astype(int).astype(str).unique().tolist()
         )
-        # Register users and items in the LightFM Dataset but do not register item_features
-        # because we will build the item_features matrix manually to avoid mapping mismatches.
+        # Register users, items and item feature names in the LightFM Dataset.
+        # This ensures the dataset's internal feature mapping contains the
+        # exact feature strings we will use when constructing item features.
         self.dataset.fit(
             users=user_identifier_strings,
             items=item_identifier_strings,
@@ -298,8 +299,8 @@ class LightFMHybridModel(BaseModel):
             minimum_year_value = float(year_series.min())
             maximum_year_value = float(year_series.max())
             if maximum_year_value > minimum_year_value:
-                prepared_movies_dataframe["release_year"] = (
-                    (year_series - minimum_year_value) / (maximum_year_value - minimum_year_value)
+                prepared_movies_dataframe["release_year"] = (year_series - minimum_year_value) / (
+                    maximum_year_value - minimum_year_value
                 )
             else:
                 prepared_movies_dataframe["release_year"] = 0.0
@@ -328,7 +329,7 @@ class LightFMHybridModel(BaseModel):
         ]
         interactions_matrix, interaction_weights_matrix = self.dataset.build_interactions(interaction_tuples)
 
-        # Build item features matrix manually using feature_column_names ordering.
+        # Build item features matrix manually using the explicit feature ordering.
         _, _, item_id_to_index_map, _ = self.dataset.mapping()
 
         feature_name_to_index = {name: idx for idx, name in enumerate(feature_column_names)}
@@ -370,6 +371,5 @@ class LightFMHybridModel(BaseModel):
         self.user_id_to_index_map = dict(user_id_to_index_map)
         self.item_id_to_index_map = dict(item_id_to_index_map)
         self.index_to_item_id_map = {
-            item_index: raw_item_id
-            for raw_item_id, item_index in self.item_id_to_index_map.items()
+            item_index: raw_item_id for raw_item_id, item_index in self.item_id_to_index_map.items()
         }
