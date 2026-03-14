@@ -1,0 +1,68 @@
+[project]
+name = "data-mining-recommender-system"s
+version = "0.1.0"
+requires-python = ">= 3.10"
+description = "Data Mining Assignment 2 from Samuel van Nimwegen"
+readme = "README.md"
+readme-content-type = "text/markdown"
+dependencies = [
+    "apyori~=1.1.2",
+    "ipykernel~=7.2.0",
+    "matplotlib~=3.10.8",
+    "mlxtend~=0.24.0",
+    "networkx~=3.6.1",
+    "numpy~=2.4.2",
+    "pandas~=3.0.1",
+    "scikit-learn~=1.8.0",
+    "scipy~=1.17.1",
+    "seaborn~=0.13.2",
+    "tqdm~=4.67.3",
+]
+
+line-length = 120
+indent-width = 4
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E","W","F","N","D","UP","DOC","NPY"]
+ignore = ["D100", "D213", "D203", "D104", "UP047"]
+
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+ignore_missing_imports = true
+
+#################################################################################################################
+# Pytest
+#################################################################################################################
+[tool.pytest.ini_options]
+filterwarnings = [
+]
+
+[tool.pylint]
+max-line-length = 120
+indent-string = "    "
+
+[tool.pylint.messages_control]
+disable = [
+    "import-error",
+    "too-few-public-methods",
+    "redefined-outer-name",
+    ]
+max-variables = 25
