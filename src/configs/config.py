@@ -48,7 +48,6 @@ class CleanerConfig:
         if not 0.0 <= self.max_duplicate_ratio <= 1.0:
             raise ValueError("max_duplicate_ratio must be between 0.0 and 1.0.")
 
-
     def __dict__(self) -> dict[str, str]:
         """Converts the config to a dictionary with string values for logging.
 
@@ -66,5 +65,6 @@ class CleanerConfig:
             "max_orphan_ratio": str(self.max_orphan_ratio),
             "max_duplicate_ratio": str(self.max_duplicate_ratio),
         }
+
 
 __all__ = ["CleanerConfig"]
