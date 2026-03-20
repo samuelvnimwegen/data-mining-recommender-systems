@@ -1,29 +1,46 @@
-# src/evaluation — Evaluation metrics and utilities
+# src/evaluation - Evaluation metrics and pipeline
 
 Primary function
 
-- Implements metric calculations including RMSE, Precision@K, Recall@K, Diversity, and Novelty.
+- Implements accuracy, ranking, and beyond-accuracy metrics for offline recommender benchmarking.
 
 Architectural purpose
 
-- Isolates performance evaluation from the prediction engine so metrics can be tested uniformly across models.
+- Keeps metric logic separate from model training and inference logic.
+- Provides one shared evaluator that can score ItemKNN, SVD, and LightFM in a consistent way.
 
-Contents
+Implemented modules
 
-- Utility modules that compute per-user and aggregate metrics.
+- `src/evaluation/metrics.py`
+  - `calculate_rmse`
+  - `calculate_mae`
+  - `calculate_precision_recall_at_k`
+  - `calculate_novelty_at_k`
+  - `calculate_diversity_at_k`
+  - `calculate_serendipity_at_k`
+- `src/evaluation/pipeline.py`
+  - `OfflineRecommenderEvaluator`
+  - `EvaluationResult`
 
 Usage
 
 ```python
-from src.evaluation.metrics import rmse, precision_at_k
+from src.evaluation.pipeline import OfflineRecommenderEvaluator
 
-# Example
-rmse_value = rmse(y_true, y_pred)
-prec = precision_at_k(recommended, ground_truth, k=10)
+evaluator = OfflineRecommenderEvaluator(number_of_recommendations=10, relevance_threshold=4.0)
+result = evaluator.evaluate(
+    model=model,
+    train_dataframe=train_dataframe,
+    validation_dataframe=validation_dataframe,
+    movies_dataframe=movies_dataframe,
+    inference_router=inference_router,
+)
+print(result)
 ```
 
 Notes
 
-- Keep metric functions small and vectorized to avoid slow Python loops during evaluation.
-- Add tests that exercise edge cases (empty recommendations, ties, small k values).
-
+- Precision@K and Recall@K are calculated from predicted ratings on validation rows.
+- Novelty@K uses self-information from train-set item popularity.
+- Diversity@K uses pairwise cosine distance on one-hot genre vectors.
+- Serendipity@K measures how surprising recommendations are compared to each user's seen history.

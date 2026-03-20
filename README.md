@@ -63,28 +63,50 @@ Model wrappers are implemented in `src/models/`:
 - `src/models/item_knn_model.py`: Item-based collaborative filtering (`KNNBasic`, `user_based=False`).
 - `src/models/svd_model.py`: Matrix factorization (`SVD`).
 - `src/models/lightfm_model.py`: Hybrid recommender (`LightFM`) using engineered item features.
+- `src/models/cold_start.py`: Bayesian fallback ranker for unseen or low-activity users.
+- `src/models/inference_router.py`: Conditional router that switches between personalized and fallback recommendations.
 
-Both Surprise wrappers expose:
+## Task 2 cold-start behavior
 
-- `fit(ratings_dataframe)`
-- `predict_rating(user_identifier, movie_identifier)`
-- `recommend_top_n(user_identifier, number_of_recommendations)`
+The inference router uses this logic:
 
-The LightFM wrapper exposes:
+- If a user has enough training interactions, return personalized recommendations from ItemKNN/SVD/LightFM.
+- If a user is unseen or has too little history, use a fallback ranking.
+- The fallback ranking blends Bayesian movie popularity and global genre trend scores.
+- Optional onboarding genres can slightly boost matching movies.
 
-- `fit(ratings_dataframe, movies_dataframe)`
-- `predict_rating(user_identifier, movie_identifier)`
-- `recommend_top_n(user_identifier, number_of_recommendations)`
+## Task 1 offline evaluation
 
-Compatibility note:
+Evaluation helpers are in `src/evaluation/`:
 
-- `lightfm` currently builds cleanly on Python versions below 3.12 in this project setup.
-- On Python 3.12, LightFM tests are auto-skipped if the package is unavailable.
+- Predictive accuracy: RMSE and MAE.
+- Ranking quality: Precision@K and Recall@K.
+- Beyond-accuracy: Novelty@K, Diversity@K, and Serendipity@K.
 
-## Quick model test run
+Run evaluation from the CLI:
 
 ```bash
-python -m pytest tests/test_surprise_models.py -q
+python main.py \
+  --run-task1-evaluation \
+  --model-name svd \
+  --train-ratings-path data/processed/notebook_demo/ratings_train_split.csv \
+  --validation-ratings-path data/processed/notebook_demo/ratings_validation_split.csv \
+  --movies-features-path data/processed/movies_cleaned.csv \
+  --top-n 10 \
+  --relevance-threshold 4.0
+```
+
+Run cold-start aware inference from the CLI:
+
+```bash
+python main.py \
+  --run-task2-inference \
+  --model-name lightfm \
+  --train-ratings-path data/processed/notebook_demo/ratings_train_split.csv \
+  --movies-features-path data/processed/movies_cleaned.csv \
+  --target-user-id 99999 \
+  --top-n 10 \
+  --preferred-genres "Sci-Fi,Action"
 ```
 
 ## Train/Validation splitting
