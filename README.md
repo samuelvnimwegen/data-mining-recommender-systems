@@ -133,3 +133,40 @@ train_df, val_df = split_ratings_train_val(
     max_validation_users=50,
 )
 ```
+
+## Hyperparameter grid search
+
+A reusable grid-search runner is available in `src/evaluation/grid_search.py`.
+
+It supports:
+- `itemknn`
+- `svd`
+- `lightfm`
+
+Run a full search from CLI:
+
+```bash
+python main.py \
+  --run-hyperparameter-search \
+  --grid-models itemknn,svd,lightfm \
+  --grid-selection-metric rmse_value \
+  --train-ratings-path data/processed/notebook_demo/ratings_train_split.csv \
+  --validation-ratings-path data/processed/notebook_demo/ratings_validation_split.csv \
+  --movies-features-path data/processed/movies_cleaned.csv \
+  --grid-output-dir data/processed/grid_search
+```
+
+Run a faster search with capped trials:
+
+```bash
+python main.py \
+  --run-hyperparameter-search \
+  --grid-models svd \
+  --grid-max-trials-per-model 3 \
+  --grid-selection-metric rmse_value
+```
+
+Artifacts are saved per model in the output directory:
+- `all_trials.csv`
+- `best_result.json`
+

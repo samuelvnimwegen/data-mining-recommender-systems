@@ -51,6 +51,44 @@ def build_argument_parser() -> argparse.ArgumentParser:
     argument_parser.add_argument(
         "--preferred-genres", default="", help="Comma separated genres for cold-start fallback."
     )
+
+    # Grid-search task arguments.
+    argument_parser.add_argument(
+        "--run-hyperparameter-search",
+        action="store_true",
+        help="Run grid search to tune model hyperparameters.",
+    )
+    argument_parser.add_argument(
+        "--grid-models",
+        default="itemknn,svd,lightfm",
+        help="Comma separated model names for grid search.",
+    )
+    argument_parser.add_argument(
+        "--grid-selection-metric",
+        default="rmse_value",
+        choices=[
+            "rmse_value",
+            "mae_value",
+            "precision_at_k",
+            "recall_at_k",
+            "ndcg_at_k",
+            "novelty_at_k",
+            "diversity_at_k",
+            "serendipity_at_k",
+        ],
+        help="Metric used to select the best hyperparameters.",
+    )
+    argument_parser.add_argument(
+        "--grid-max-trials-per-model",
+        type=int,
+        default=None,
+        help="Optional cap on number of trials per model.",
+    )
+    argument_parser.add_argument(
+        "--grid-output-dir",
+        default="data/processed/grid_search",
+        help="Directory where grid-search artifacts are saved.",
+    )
     return argument_parser
 
 
@@ -232,6 +270,7 @@ def _run_evaluation_and_inference(
         print(f"MAE: {evaluation_result.mae_value:.4f}")
         print(f"Precision@{parsed_arguments.top_n}: {evaluation_result.precision_at_k:.4f}")
         print(f"Recall@{parsed_arguments.top_n}: {evaluation_result.recall_at_k:.4f}")
+        print(f"NDCG@{parsed_arguments.top_n}: {evaluation_result.ndcg_at_k:.4f}")
         print(f"Novelty@{parsed_arguments.top_n}: {evaluation_result.novelty_at_k:.4f}")
         print(f"Diversity@{parsed_arguments.top_n}: {evaluation_result.diversity_at_k:.4f}")
         print(f"Serendipity@{parsed_arguments.top_n}: {evaluation_result.serendipity_at_k:.4f}")
@@ -265,6 +304,85 @@ def _run_evaluation_and_inference(
     return 0
 
 
+def _parse_grid_models(grid_models_value: str) -> list[str]:
+    """Parses comma-separated model names for grid search.
+
+    Args:
+        grid_models_value: Raw CLI value.
+
+    Returns:
+        list[str]: Normalized list of model names.
+
+    Raises:
+        ValueError: If a model name is unsupported.
+    """
+    supported_model_names = {"itemknn", "svd", "lightfm"}
+    parsed_model_names = [
+        model_name.strip().lower() for model_name in grid_models_value.split(",") if model_name.strip()
+    ]
+    if not parsed_model_names:
+        raise ValueError("At least one model must be provided in --grid-models.")
+    invalid_model_names = sorted(set(parsed_model_names).difference(supported_model_names))
+    if invalid_model_names:
+        raise ValueError(f"Unsupported model names in --grid-models: {invalid_model_names}")
+    return parsed_model_names
+
+
+def _run_hyperparameter_search(
+    parsed_arguments: argparse.Namespace,
+    workspace_root_path: Path,
+) -> int:
+    """Runs hyperparameter grid search for selected models.
+
+    Args:
+        parsed_arguments: Parsed CLI arguments.
+        workspace_root_path: Root path of the workspace.
+
+    Returns:
+        int: Process exit code.
+    """
+    from src.evaluation.grid_search import GridSearchConfig
+    from src.evaluation.grid_search import RecommenderGridSearch
+
+    train_ratings_path = _resolve_workspace_path(workspace_root_path, parsed_arguments.train_ratings_path)
+    validation_ratings_path = _resolve_workspace_path(workspace_root_path, parsed_arguments.validation_ratings_path)
+    movies_features_path = _resolve_workspace_path(workspace_root_path, parsed_arguments.movies_features_path)
+    grid_output_directory_path = _resolve_workspace_path(workspace_root_path, parsed_arguments.grid_output_dir)
+
+    selected_model_names = _parse_grid_models(parsed_arguments.grid_models)
+    train_ratings_dataframe = _load_dataframe_from_csv(train_ratings_path)
+    validation_ratings_dataframe = _load_dataframe_from_csv(validation_ratings_path)
+    movies_features_dataframe = _load_dataframe_from_csv(movies_features_path)
+
+    grid_search_config = GridSearchConfig(
+        selected_model_names=selected_model_names,
+        metric_name=parsed_arguments.grid_selection_metric,
+        number_of_recommendations=parsed_arguments.top_n,
+        relevance_threshold=parsed_arguments.relevance_threshold,
+        maximum_trials_per_model=parsed_arguments.grid_max_trials_per_model,
+        output_directory_path=grid_output_directory_path,
+    )
+
+    recommender_grid_search = RecommenderGridSearch(search_config=grid_search_config)
+    model_results = recommender_grid_search.run(
+        train_dataframe=train_ratings_dataframe,
+        validation_dataframe=validation_ratings_dataframe,
+        movies_dataframe=movies_features_dataframe,
+    )
+
+    print(f"Grid-search output: {grid_output_directory_path}")
+    for model_result in model_results:
+        selected_metric_value = getattr(model_result.best_trial.evaluation_result, model_result.metric_name)
+        print(
+            f"Model={model_result.model_name}, "
+            f"best_trial={model_result.best_trial.trial_index}, "
+            f"{model_result.metric_name}={selected_metric_value:.4f}, "
+            f"params={model_result.best_trial.parameter_values}"
+        )
+
+    return 0
+
+
 def main(command_line_arguments: list[str] | None = None) -> int:
     """Runs selected CLI workflow.
 
@@ -281,6 +399,9 @@ def main(command_line_arguments: list[str] | None = None) -> int:
 
     argument_parser = build_argument_parser()
     parsed_arguments = argument_parser.parse_args(command_line_arguments)
+
+    if parsed_arguments.run_hyperparameter_search:
+        return _run_hyperparameter_search(parsed_arguments, workspace_root_path)
 
     if parsed_arguments.run_task1_evaluation or parsed_arguments.run_task2_inference:
         return _run_evaluation_and_inference(parsed_arguments, workspace_root_path)

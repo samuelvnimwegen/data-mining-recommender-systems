@@ -8,6 +8,7 @@ import pandas as pd
 
 from src.evaluation.metrics import calculate_diversity_at_k
 from src.evaluation.metrics import calculate_mae
+from src.evaluation.metrics import calculate_ndcg_at_k
 from src.evaluation.metrics import calculate_novelty_at_k
 from src.evaluation.metrics import calculate_precision_recall_at_k
 from src.evaluation.metrics import calculate_rmse
@@ -25,6 +26,7 @@ class EvaluationResult:
         mae_value: Mean absolute error.
         precision_at_k: Precision at K.
         recall_at_k: Recall at K.
+        ndcg_at_k: NDCG at K.
         novelty_at_k: Novelty at K.
         diversity_at_k: Diversity at K.
         serendipity_at_k: Serendipity at K.
@@ -34,6 +36,7 @@ class EvaluationResult:
     mae_value: float
     precision_at_k: float
     recall_at_k: float
+    ndcg_at_k: float
     novelty_at_k: float
     diversity_at_k: float
     serendipity_at_k: float
@@ -82,7 +85,7 @@ class OfflineRecommenderEvaluator:
             EvaluationResult: Aggregated metric values.
         """
         if validation_dataframe.empty:
-            return EvaluationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+            return EvaluationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
         prediction_rows: list[dict[str, float | int]] = []
         for user_identifier, movie_identifier, true_rating in validation_dataframe[
@@ -112,6 +115,11 @@ class OfflineRecommenderEvaluator:
             predicted_values=predictions_dataframe["predicted_rating"].tolist(),
         )
         precision_at_k, recall_at_k = calculate_precision_recall_at_k(
+            predictions_dataframe=predictions_dataframe,
+            number_of_recommendations=self.number_of_recommendations,
+            relevance_threshold=self.relevance_threshold,
+        )
+        ndcg_at_k = calculate_ndcg_at_k(
             predictions_dataframe=predictions_dataframe,
             number_of_recommendations=self.number_of_recommendations,
             relevance_threshold=self.relevance_threshold,
@@ -162,6 +170,7 @@ class OfflineRecommenderEvaluator:
             mae_value=mae_value,
             precision_at_k=precision_at_k,
             recall_at_k=recall_at_k,
+            ndcg_at_k=ndcg_at_k,
             novelty_at_k=novelty_at_k,
             diversity_at_k=diversity_at_k,
             serendipity_at_k=serendipity_at_k,

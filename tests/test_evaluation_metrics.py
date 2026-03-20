@@ -160,3 +160,22 @@ def test_offline_evaluator_runs_end_to_end() -> None:
     assert result.novelty_at_k >= 0.0
     assert result.diversity_at_k >= 0.0
     assert result.serendipity_at_k >= 0.0
+
+
+def test_diversity_handles_non_identifier_genre_column_names() -> None:
+    """Checks diversity works with genre columns that are not Python identifiers."""
+    movies_dataframe = pd.DataFrame(
+        {
+            "movieId": [1, 2],
+            "genre_(no genres listed)": [1, 0],
+            "genre_Action": [0, 1],
+        }
+    )
+    recommendations_by_user = {1: [1, 2]}
+
+    diversity_value = calculate_diversity_at_k(
+        recommendations_by_user=recommendations_by_user,
+        movies_dataframe=movies_dataframe,
+    )
+
+    assert diversity_value >= 0.0

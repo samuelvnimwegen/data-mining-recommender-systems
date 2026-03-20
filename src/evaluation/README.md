@@ -21,6 +21,11 @@ Implemented modules
 - `src/evaluation/pipeline.py`
   - `OfflineRecommenderEvaluator`
   - `EvaluationResult`
+- `src/evaluation/grid_search.py`
+  - `GridSearchConfig`
+  - `GridSearchTrialResult`
+  - `ModelGridSearchResult`
+  - `RecommenderGridSearch`
 
 Usage
 
@@ -38,9 +43,31 @@ result = evaluator.evaluate(
 print(result)
 ```
 
+Grid-search usage
+
+```python
+from pathlib import Path
+
+from src.evaluation.grid_search import GridSearchConfig, RecommenderGridSearch
+
+search_config = GridSearchConfig(
+    selected_model_names=["svd", "itemknn"],
+    metric_name="rmse_value",
+    maximum_trials_per_model=5,
+    output_directory_path=Path("data/processed/grid_search"),
+)
+runner = RecommenderGridSearch(search_config=search_config)
+results = runner.run(train_dataframe, validation_dataframe, movies_dataframe)
+```
+
 Notes
 
 - Precision@K and Recall@K are calculated from predicted ratings on validation rows.
 - Novelty@K uses self-information from train-set item popularity.
 - Diversity@K uses pairwise cosine distance on one-hot genre vectors.
 - Serendipity@K measures how surprising recommendations are compared to each user's seen history.
+
+Saved files per model
+
+- `all_trials.csv`: Full trial table with parameters and metrics.
+- `best_result.json`: Best trial summary.

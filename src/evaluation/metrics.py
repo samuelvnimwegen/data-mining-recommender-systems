@@ -153,11 +153,11 @@ def _build_movie_vector_map(movies_dataframe: pd.DataFrame) -> dict[int, np.ndar
     movie_features_dataframe["movieId"] = movie_features_dataframe["movieId"].astype(int)
 
     movie_vector_map: dict[int, np.ndarray] = {}
-    for row in movie_features_dataframe.itertuples(index=False):
-        movie_vector_map[int(row.movieId)] = np.array(
-            [float(getattr(row, column_name)) for column_name in genre_column_names],
-            dtype=float,
-        )
+    # Use explicit column indexing so names like genre_(no genres listed) work.
+    for row in movie_features_dataframe.itertuples(index=False, name=None):
+        movie_identifier = int(row[0])
+        feature_values = [float(feature_value) for feature_value in row[1:]]
+        movie_vector_map[movie_identifier] = np.array(feature_values, dtype=float)
     return movie_vector_map
 
 
@@ -276,3 +276,77 @@ def calculate_serendipity_at_k(
     if not user_serendipity_values:
         return 0.0
     return float(np.mean(user_serendipity_values))
+
+
+def _calculate_discounted_cumulative_gain(relevance_values: list[float]) -> float:
+    """Calculates discounted cumulative gain from relevance values.
+
+    Args:
+        relevance_values: Ordered relevance values.
+
+    Returns:
+        float: DCG score.
+    """
+    discounted_gain_value = 0.0
+    for index_value, relevance_value in enumerate(relevance_values):
+        discounted_gain_value += (2.0 ** float(relevance_value) - 1.0) / math.log2(index_value + 2.0)
+    return discounted_gain_value
+
+
+def calculate_ndcg_at_k(
+    predictions_dataframe: pd.DataFrame,
+    number_of_recommendations: int = 10,
+    relevance_threshold: float = 4.0,
+) -> float:
+    """Calculates averaged NDCG@K from prediction rows.
+
+    Relevance is derived from explicit ratings by shifting ratings relative
+    to the threshold. Ratings below threshold become zero relevance.
+
+    Args:
+        predictions_dataframe: Dataframe with userId, true_rating, predicted_rating.
+        number_of_recommendations: K for top-K metric.
+        relevance_threshold: Minimum rating that starts positive relevance.
+
+    Returns:
+        float: Mean NDCG@K value.
+
+    Raises:
+        ValueError: If required columns are missing.
+    """
+    required_columns = {"userId", "true_rating", "predicted_rating"}
+    if not required_columns.issubset(set(predictions_dataframe.columns)):
+        raise ValueError("predictions_dataframe must contain userId, true_rating and predicted_rating.")
+    if number_of_recommendations <= 0:
+        return 0.0
+    if predictions_dataframe.empty:
+        return 0.0
+
+    ndcg_values: list[float] = []
+
+    for _, user_rows in predictions_dataframe.groupby("userId"):
+        sorted_rows = user_rows.sort_values("predicted_rating", ascending=False)
+        top_rows = sorted_rows.head(number_of_recommendations)
+
+        predicted_relevance_values = [
+            max(float(true_rating_value) - relevance_threshold + 1.0, 0.0)
+            for true_rating_value in top_rows["true_rating"].tolist()
+        ]
+        ideal_relevance_values = sorted(
+            [
+                max(float(true_rating_value) - relevance_threshold + 1.0, 0.0)
+                for true_rating_value in user_rows["true_rating"].tolist()
+            ],
+            reverse=True,
+        )[:number_of_recommendations]
+
+        dcg_value = _calculate_discounted_cumulative_gain(predicted_relevance_values)
+        ideal_dcg_value = _calculate_discounted_cumulative_gain(ideal_relevance_values)
+        if ideal_dcg_value <= 0.0:
+            ndcg_values.append(0.0)
+        else:
+            ndcg_values.append(dcg_value / ideal_dcg_value)
+
+    if not ndcg_values:
+        return 0.0
+    return float(np.mean(ndcg_values))
