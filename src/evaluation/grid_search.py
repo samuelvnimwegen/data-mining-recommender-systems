@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+from tqdm.auto import tqdm
 
 from src.evaluation.pipeline import EvaluationResult
 from src.evaluation.pipeline import OfflineRecommenderEvaluator
@@ -48,6 +49,8 @@ class GridSearchConfig:
     maximum_trials_per_model: int | None = None
     # Where to write per-model artifacts (CSV + JSON).
     output_directory_path: Path = Path("data/processed/grid_search")
+    # Toggle progress bars for model/trial loops.
+    enable_progress_bar: bool = True
 
     def __post_init__(self) -> None:
         """Validate configuration and normalize types.
@@ -210,8 +213,20 @@ class RecommenderGridSearch:
         )
 
         trial_results: list[GridSearchTrialResult] = []
+
+        # Iterate over parameter combinations with optional progress display.
+        trial_index_iterator = range(1, len(parameter_grid_values) + 1)
+        if self.search_config.enable_progress_bar:
+            trial_index_iterator = tqdm(
+                trial_index_iterator,
+                total=len(parameter_grid_values),
+                desc=f"{model_name} trials",
+                leave=False,
+            )
+
         # Loop over every combination and run a trial. Trials are 1-indexed.
-        for trial_index, parameter_values in enumerate(parameter_grid_values, start=1):
+        for trial_index in trial_index_iterator:
+            parameter_values = parameter_grid_values[trial_index - 1]
             # Construct the model using the trial's parameter map.
             model = self._build_model(model_name=model_name, parameter_values=parameter_values)
 
@@ -277,11 +292,12 @@ class RecommenderGridSearch:
             }
         elif model_name == "lightfm":
             # Parameters map designed to match LightFMHybridModel ctor.
+            # Keep losses that support weighted interactions in this pipeline.
             grid_map = {
                 "number_of_components": [16, 32, 48, 64],
                 "number_of_epochs": [15, 30, 45],
                 "learning_rate_value": [0.01, 0.03, 0.05],
-                "loss_name": ["warp", "bpr", "warp-kos"],
+                "loss_name": ["warp", "bpr"],
                 "random_seed": [42],
             }
         else:

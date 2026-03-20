@@ -56,6 +56,28 @@ class _PipelineDummyModel(BaseModel):
         return [(3, 4.8), (4, 4.6), (5, 4.4)][:number_of_recommendations]
 
 
+class _PipelineUnknownIdModel(_PipelineDummyModel):
+    """Dummy model that raises unknown-id errors for one movie."""
+
+    def predict_rating(self, user_identifier: int, movie_identifier: int) -> float:
+        """Raises unknown movie error for a specific item id.
+
+        Args:
+            user_identifier: User id.
+            movie_identifier: Movie id.
+
+        Returns:
+            float: Predicted score when movie id is known.
+
+        Raises:
+            ValueError: If movie id is treated as unknown.
+        """
+        _ = user_identifier
+        if int(movie_identifier) == 999:
+            raise ValueError("Unknown movie id: 999")
+        return 4.0
+
+
 def test_accuracy_metric_functions() -> None:
     """Checks RMSE and MAE values for simple inputs."""
     true_values = [4.0, 2.0, 5.0]
@@ -160,6 +182,47 @@ def test_offline_evaluator_runs_end_to_end() -> None:
     assert result.novelty_at_k >= 0.0
     assert result.diversity_at_k >= 0.0
     assert result.serendipity_at_k >= 0.0
+
+
+def test_offline_evaluator_skips_unknown_prediction_rows() -> None:
+    """Checks evaluator skips unknown-id prediction rows."""
+    train_dataframe = pd.DataFrame(
+        {
+            "userId": [1, 1, 2],
+            "movieId": [1, 2, 3],
+            "rating": [4.0, 3.5, 4.5],
+        }
+    )
+    validation_dataframe = pd.DataFrame(
+        {
+            "userId": [1, 1],
+            "movieId": [2, 999],
+            "rating": [4.0, 5.0],
+        }
+    )
+    movies_dataframe = pd.DataFrame(
+        {
+            "movieId": [1, 2, 3, 999],
+            "genre_Action": [1, 0, 1, 0],
+            "genre_Comedy": [0, 1, 0, 1],
+        }
+    )
+
+    model = _PipelineUnknownIdModel()
+    model.fit(ratings_dataframe=train_dataframe)
+
+    evaluator = OfflineRecommenderEvaluator(number_of_recommendations=2, relevance_threshold=4.0)
+    result = evaluator.evaluate(
+        model=model,
+        train_dataframe=train_dataframe,
+        validation_dataframe=validation_dataframe,
+        movies_dataframe=movies_dataframe,
+    )
+
+    assert result.rmse_value >= 0.0
+    assert result.mae_value >= 0.0
+    assert 0.0 <= result.precision_at_k <= 1.0
+    assert 0.0 <= result.recall_at_k <= 1.0
 
 
 def test_diversity_handles_non_identifier_genre_column_names() -> None:

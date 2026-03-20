@@ -40,6 +40,7 @@ Settings are stored in `src/configs/config.py` in the `CleanerConfig` dataclass.
 - `notebooks/04_svd_usage.ipynb`: Shows SVD training, prediction, and top-N recommendations.
 - `notebooks/05_lightfm_usage.ipynb`: Shows LightFM hybrid training with engineered item features.
 - `notebooks/06_ratings_splitter_usage.ipynb`: Shows how to create and save the deterministic 70/30 train/validation split.
+- `notebooks/07_grid_search_usage.ipynb`: Runs hyperparameter grid search for ItemKNN, SVD, and LightFM.
 
 ## Quick run
 

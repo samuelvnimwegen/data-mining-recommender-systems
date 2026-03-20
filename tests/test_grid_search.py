@@ -117,3 +117,48 @@ def test_main_cli_runs_hyperparameter_search(tmp_path: Path, capsys) -> None:
     assert "Grid-search output:" in captured_output
     assert "Model=svd" in captured_output
     assert (output_path / "svd" / "all_trials.csv").exists()
+
+
+def test_grid_search_lightfm_handles_validation_movie_not_in_train(tmp_path: Path) -> None:
+    """Checks LightFM grid search works when validation has unseen-in-train movie ids."""
+    train_dataframe, validation_dataframe, movies_dataframe = _build_small_split_dataframes()
+
+    validation_dataframe = pd.concat(
+        [
+            validation_dataframe,
+            pd.DataFrame(
+                {
+                    "userId": [1],
+                    "movieId": [5],
+                    "rating": [3.5],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+
+    search_config = GridSearchConfig(
+        selected_model_names=["lightfm"],
+        metric_name="ndcg_at_k",
+        maximum_trials_per_model=1,
+        output_directory_path=tmp_path / "grid_output",
+    )
+    grid_search_runner = RecommenderGridSearch(search_config=search_config)
+
+    model_results = grid_search_runner.run(
+        train_dataframe=train_dataframe,
+        validation_dataframe=validation_dataframe,
+        movies_dataframe=movies_dataframe,
+    )
+
+    assert len(model_results) == 1
+    assert model_results[0].model_name == "lightfm"
+    assert (tmp_path / "grid_output" / "lightfm" / "all_trials.csv").exists()
+
+
+def test_lightfm_grid_excludes_warp_kos_loss() -> None:
+    """Checks LightFM parameter grid excludes unsupported warp-kos loss."""
+    parameter_grid_values = RecommenderGridSearch._build_parameter_grid("lightfm")
+
+    assert parameter_grid_values
+    assert all(parameter_map["loss_name"] != "warp-kos" for parameter_map in parameter_grid_values)

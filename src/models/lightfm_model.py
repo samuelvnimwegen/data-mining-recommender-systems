@@ -92,7 +92,7 @@ class LightFMHybridModel(BaseModel):
         self._validate_ratings_dataframe(ratings_dataframe)
         self._validate_movies_dataframe(movies_dataframe)
 
-        # Keep only rated movies that exist in movies feature table.
+        # Keep only ratings that point to movies that have engineered features.
         available_movie_ids = set(movies_dataframe["movieId"].astype(int).tolist())
         filtered_ratings_dataframe = ratings_dataframe[
             ratings_dataframe["movieId"].astype(int).isin(available_movie_ids)
@@ -100,10 +100,9 @@ class LightFMHybridModel(BaseModel):
         if filtered_ratings_dataframe.empty:
             raise ValueError("No overlapping movieId values between ratings and movies data.")
 
+        # Keep all feature rows so unseen-in-train movies are still known at inference time.
         filtered_movies_dataframe = movies_dataframe[
-            movies_dataframe["movieId"]
-            .astype(int)
-            .isin(set(filtered_ratings_dataframe["movieId"].astype(int).tolist()))
+            movies_dataframe["movieId"].astype(int).isin(available_movie_ids)
         ].copy()
 
         feature_column_names = self._select_item_feature_columns(filtered_movies_dataframe)
@@ -111,12 +110,8 @@ class LightFMHybridModel(BaseModel):
 
         self.dataset = Dataset()
         user_identifier_strings = sorted(filtered_ratings_dataframe["userId"].astype(int).astype(str).unique().tolist())
-        item_identifier_strings = sorted(
-            filtered_ratings_dataframe["movieId"].astype(int).astype(str).unique().tolist()
-        )
-        # Register users, items and item feature names in the LightFM Dataset.
-        # This ensures the dataset's internal feature mapping contains the
-        # exact feature strings we will use when constructing item features.
+        # Register all movies with features, not only movies present in train interactions.
+        item_identifier_strings = sorted(prepared_movies_dataframe["movieId"].astype(int).astype(str).unique().tolist())
         self.dataset.fit(
             users=user_identifier_strings,
             items=item_identifier_strings,
@@ -338,13 +333,16 @@ class LightFMHybridModel(BaseModel):
         cols: list[int] = []
         data: list[float] = []
 
-        for row in movies_dataframe.itertuples(index=False):
-            raw_item_identifier = str(int(row.movieId))
+        # Build tuples using explicit column order.
+        # This avoids getattr issues for names like genre_(no genres listed).
+        selected_movie_columns = ["movieId", *feature_column_names]
+        for row_values in movies_dataframe[selected_movie_columns].itertuples(index=False, name=None):
+            raw_item_identifier = str(int(row_values[0]))
             if raw_item_identifier not in item_id_to_index_map:
                 continue
             item_index = item_id_to_index_map[raw_item_identifier]
-            for feature_column_name in feature_column_names:
-                feature_value = float(getattr(row, feature_column_name))
+            for feature_position, feature_column_name in enumerate(feature_column_names, start=1):
+                feature_value = float(row_values[feature_position])
                 if feature_value == 0.0:
                     continue
                 feature_index = feature_name_to_index[feature_column_name]

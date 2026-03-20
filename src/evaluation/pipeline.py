@@ -91,10 +91,19 @@ class OfflineRecommenderEvaluator:
         for user_identifier, movie_identifier, true_rating in validation_dataframe[
             ["userId", "movieId", "rating"]
         ].itertuples(index=False, name=None):
-            predicted_rating = model.predict_rating(
-                user_identifier=int(user_identifier),
-                movie_identifier=int(movie_identifier),
-            )
+            # Some models cannot score unseen users or items.
+            # Skip those rows so one cold-start pair does not break full evaluation.
+            try:
+                predicted_rating = model.predict_rating(
+                    user_identifier=int(user_identifier),
+                    movie_identifier=int(movie_identifier),
+                )
+            except ValueError as error:
+                error_message = str(error).lower()
+                if "unknown user id" in error_message or "unknown movie id" in error_message:
+                    continue
+                raise
+
             prediction_rows.append(
                 {
                     "userId": int(user_identifier),
@@ -103,6 +112,10 @@ class OfflineRecommenderEvaluator:
                     "predicted_rating": float(predicted_rating),
                 }
             )
+
+        # If every row was skipped due to unknown ids, return a safe empty result.
+        if not prediction_rows:
+            return EvaluationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
         predictions_dataframe = pd.DataFrame(prediction_rows)
 
