@@ -66,6 +66,9 @@ class GridSearchConfig:
             "ndcg_at_k",
             "novelty_at_k",
             "diversity_at_k",
+            "item_coverage_at_k",
+            "intra_list_similarity_at_k",
+            "item_to_history_distance_at_k",
             "serendipity_at_k",
         }
         # Check metric name validity.

@@ -74,6 +74,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "ndcg_at_k",
             "novelty_at_k",
             "diversity_at_k",
+            "item_coverage_at_k",
+            "intra_list_similarity_at_k",
+            "item_to_history_distance_at_k",
             "serendipity_at_k",
         ],
         help="Metric used to select the best hyperparameters.",
@@ -273,6 +276,15 @@ def _run_evaluation_and_inference(
         print(f"NDCG@{parsed_arguments.top_n}: {evaluation_result.ndcg_at_k:.4f}")
         print(f"Novelty@{parsed_arguments.top_n}: {evaluation_result.novelty_at_k:.4f}")
         print(f"Diversity@{parsed_arguments.top_n}: {evaluation_result.diversity_at_k:.4f}")
+        print(f"ItemCoverage@{parsed_arguments.top_n}: {evaluation_result.item_coverage_at_k:.4f}")
+        print(
+            f"IntraListSimilarity@{parsed_arguments.top_n}: "
+            f"{evaluation_result.intra_list_similarity_at_k:.4f}"
+        )
+        print(
+            f"ItemToHistoryDistance@{parsed_arguments.top_n}: "
+            f"{evaluation_result.item_to_history_distance_at_k:.4f}"
+        )
         print(f"Serendipity@{parsed_arguments.top_n}: {evaluation_result.serendipity_at_k:.4f}")
 
     if parsed_arguments.run_task2_inference:

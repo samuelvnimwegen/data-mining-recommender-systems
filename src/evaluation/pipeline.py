@@ -7,6 +7,9 @@ from dataclasses import dataclass
 import pandas as pd
 
 from src.evaluation.metrics import calculate_diversity_at_k
+from src.evaluation.metrics import calculate_intra_list_similarity_at_k
+from src.evaluation.metrics import calculate_item_coverage_at_k
+from src.evaluation.metrics import calculate_item_to_history_distance_at_k
 from src.evaluation.metrics import calculate_mae
 from src.evaluation.metrics import calculate_ndcg_at_k
 from src.evaluation.metrics import calculate_novelty_at_k
@@ -29,6 +32,9 @@ class EvaluationResult:
         ndcg_at_k: NDCG at K.
         novelty_at_k: Novelty at K.
         diversity_at_k: Diversity at K.
+        item_coverage_at_k: Item coverage at K.
+        intra_list_similarity_at_k: Intra-list similarity at K.
+        item_to_history_distance_at_k: Item-to-history distance novelty at K.
         serendipity_at_k: Serendipity at K.
     """
 
@@ -39,6 +45,9 @@ class EvaluationResult:
     ndcg_at_k: float
     novelty_at_k: float
     diversity_at_k: float
+    item_coverage_at_k: float
+    intra_list_similarity_at_k: float
+    item_to_history_distance_at_k: float
     serendipity_at_k: float
 
 
@@ -85,7 +94,7 @@ class OfflineRecommenderEvaluator:
             EvaluationResult: Aggregated metric values.
         """
         if validation_dataframe.empty:
-            return EvaluationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+            return EvaluationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
         prediction_rows: list[dict[str, float | int]] = []
         for user_identifier, movie_identifier, true_rating in validation_dataframe[
@@ -115,7 +124,7 @@ class OfflineRecommenderEvaluator:
 
         # If every row was skipped due to unknown ids, return a safe empty result.
         if not prediction_rows:
-            return EvaluationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+            return EvaluationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
         predictions_dataframe = pd.DataFrame(prediction_rows)
 
@@ -165,6 +174,14 @@ class OfflineRecommenderEvaluator:
             recommendations_by_user=recommendation_map,
             movies_dataframe=movies_dataframe,
         )
+        item_coverage_at_k = calculate_item_coverage_at_k(
+            recommendations_by_user=recommendation_map,
+            recommendable_movie_ids=set(train_dataframe["movieId"].astype(int).unique().tolist()),
+        )
+        intra_list_similarity_at_k = calculate_intra_list_similarity_at_k(
+            recommendations_by_user=recommendation_map,
+            movies_dataframe=movies_dataframe,
+        )
         user_seen_items = (
             train_dataframe.groupby("userId")["movieId"]
             .apply(lambda movie_series: set(movie_series.astype(int)))
@@ -173,6 +190,11 @@ class OfflineRecommenderEvaluator:
             else {}
         )
         serendipity_at_k = calculate_serendipity_at_k(
+            recommendations_by_user=recommendation_map,
+            user_seen_items=user_seen_items,
+            movies_dataframe=movies_dataframe,
+        )
+        item_to_history_distance_at_k = calculate_item_to_history_distance_at_k(
             recommendations_by_user=recommendation_map,
             user_seen_items=user_seen_items,
             movies_dataframe=movies_dataframe,
@@ -186,5 +208,8 @@ class OfflineRecommenderEvaluator:
             ndcg_at_k=ndcg_at_k,
             novelty_at_k=novelty_at_k,
             diversity_at_k=diversity_at_k,
+            item_coverage_at_k=item_coverage_at_k,
+            intra_list_similarity_at_k=intra_list_similarity_at_k,
+            item_to_history_distance_at_k=item_to_history_distance_at_k,
             serendipity_at_k=serendipity_at_k,
         )

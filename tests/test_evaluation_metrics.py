@@ -5,6 +5,9 @@ from __future__ import annotations
 import pandas as pd
 
 from src.evaluation.metrics import calculate_diversity_at_k
+from src.evaluation.metrics import calculate_intra_list_similarity_at_k
+from src.evaluation.metrics import calculate_item_coverage_at_k
+from src.evaluation.metrics import calculate_item_to_history_distance_at_k
 from src.evaluation.metrics import calculate_mae
 from src.evaluation.metrics import calculate_novelty_at_k
 from src.evaluation.metrics import calculate_precision_recall_at_k
@@ -132,6 +135,25 @@ def test_novelty_and_diversity_functions() -> None:
     )
     assert diversity_value >= 0.0
 
+    intra_list_similarity_value = calculate_intra_list_similarity_at_k(
+        recommendations_by_user=recommendations_by_user,
+        movies_dataframe=movies_dataframe,
+    )
+    assert 0.0 <= intra_list_similarity_value <= 1.0
+
+    item_coverage_value = calculate_item_coverage_at_k(
+        recommendations_by_user=recommendations_by_user,
+        recommendable_movie_ids={1, 2, 3, 4},
+    )
+    assert round(item_coverage_value, 4) == 0.75
+
+    item_to_history_distance_value = calculate_item_to_history_distance_at_k(
+        recommendations_by_user=recommendations_by_user,
+        user_seen_items={1: {1, 3}, 2: {2}},
+        movies_dataframe=movies_dataframe,
+    )
+    assert item_to_history_distance_value >= 0.0
+
     serendipity_value = calculate_serendipity_at_k(
         recommendations_by_user=recommendations_by_user,
         user_seen_items={1: {1, 3}, 2: {2}},
@@ -181,6 +203,9 @@ def test_offline_evaluator_runs_end_to_end() -> None:
     assert 0.0 <= result.recall_at_k <= 1.0
     assert result.novelty_at_k >= 0.0
     assert result.diversity_at_k >= 0.0
+    assert 0.0 <= result.item_coverage_at_k <= 1.0
+    assert 0.0 <= result.intra_list_similarity_at_k <= 1.0
+    assert result.item_to_history_distance_at_k >= 0.0
     assert result.serendipity_at_k >= 0.0
 
 

@@ -29,9 +29,9 @@ class ColdStartRecommendation:
 class BayesianColdStartRanker:
     """Builds fallback recommendations with Bayesian and genre trend scores.
 
-    The ranker first calculates a Bayesian movie score that balances mean
-    rating and rating volume. It then blends that score with a genre trend
-    score learned from global rating behavior.
+    The ranker can return two fallback styles:
+    - Blended Bayesian plus genre trend scores.
+    - Popularity-only ranking reranked to increase genre coverage.
 
     Args:
         bayesian_weight: Weight for Bayesian popularity in the final score.
@@ -132,11 +132,12 @@ class BayesianColdStartRanker:
         movies_work_dataframe["genre_trend_score"] = genre_score_values
 
         score_dataframe = movies_work_dataframe.merge(
-            per_movie_stats_dataframe[["movieId", "bayesian_score"]],
+            per_movie_stats_dataframe[["movieId", "bayesian_score", "ratings_count"]],
             on="movieId",
             how="left",
         )
         score_dataframe["bayesian_score"] = score_dataframe["bayesian_score"].fillna(global_mean_rating)
+        score_dataframe["ratings_count"] = score_dataframe["ratings_count"].fillna(0.0)
         score_dataframe["genre_trend_score"] = score_dataframe["genre_trend_score"].fillna(global_mean_rating)
 
         score_dataframe["bayesian_norm"] = self._min_max_normalize(score_dataframe["bayesian_score"])
@@ -148,7 +149,9 @@ class BayesianColdStartRanker:
             + self.genre_trend_weight * score_dataframe["genre_norm"]
         ) / combined_weight
 
-        self._fitted_movie_scores_dataframe = score_dataframe[["movieId", "combined_score", "bayesian_score"]].copy()
+        self._fitted_movie_scores_dataframe = score_dataframe[
+            ["movieId", "combined_score", "bayesian_score", "ratings_count"]
+        ].copy()
         self._movie_id_to_genres_map = movie_id_to_genres_map
 
     def recommend(
@@ -156,6 +159,7 @@ class BayesianColdStartRanker:
         number_of_recommendations: int = 10,
         exclude_movie_identifiers: set[int] | None = None,
         preferred_genres: list[str] | None = None,
+        strategy_name: str = "blended",
     ) -> list[ColdStartRecommendation]:
         """Builds top-N fallback recommendations.
 
@@ -163,12 +167,14 @@ class BayesianColdStartRanker:
             number_of_recommendations: Number of rows to return.
             exclude_movie_identifiers: Movie ids to avoid in output.
             preferred_genres: Optional onboarding genre preferences.
+            strategy_name: Fallback strategy name. Supported values are
+                "blended" and "popular_genre_coverage".
 
         Returns:
             list[ColdStartRecommendation]: Ranked fallback recommendations.
 
         Raises:
-            ValueError: If ranker is not fitted.
+            ValueError: If ranker is not fitted or strategy is unknown.
         """
         if self._fitted_movie_scores_dataframe is None:
             raise ValueError("BayesianColdStartRanker must be fitted before recommend calls.")
@@ -184,6 +190,36 @@ class BayesianColdStartRanker:
                 .isin(set(int(movie_id) for movie_id in exclude_movie_identifiers))
             ].copy()
 
+        if strategy_name == "blended":
+            return self._recommend_with_blended_strategy(
+                working_dataframe=working_dataframe,
+                number_of_recommendations=number_of_recommendations,
+                preferred_genres=preferred_genres,
+            )
+        if strategy_name == "popular_genre_coverage":
+            return self._recommend_with_popularity_genre_coverage_strategy(
+                working_dataframe=working_dataframe,
+                number_of_recommendations=number_of_recommendations,
+            )
+
+        raise ValueError(f"Unsupported cold-start strategy_name: {strategy_name}")
+
+    def _recommend_with_blended_strategy(
+        self,
+        working_dataframe: pd.DataFrame,
+        number_of_recommendations: int,
+        preferred_genres: list[str] | None,
+    ) -> list[ColdStartRecommendation]:
+        """Returns recommendations from blended fallback score.
+
+        Args:
+            working_dataframe: Candidate dataframe.
+            number_of_recommendations: Number of rows to return.
+            preferred_genres: Optional onboarding genre preferences.
+
+        Returns:
+            list[ColdStartRecommendation]: Ranked recommendations.
+        """
         if preferred_genres:
             normalized_preferences = {
                 genre_name.strip().lower() for genre_name in preferred_genres if genre_name.strip()
@@ -205,8 +241,8 @@ class BayesianColdStartRanker:
                 )
 
         working_dataframe = working_dataframe.sort_values(
-            ["combined_score", "bayesian_score", "movieId"],
-            ascending=[False, False, True],
+            ["combined_score", "bayesian_score", "ratings_count", "movieId"],
+            ascending=[False, False, False, True],
         )
 
         recommendation_rows = working_dataframe.head(number_of_recommendations)
@@ -215,7 +251,75 @@ class BayesianColdStartRanker:
                 movie_identifier=int(movie_identifier),
                 score_value=float(combined_score),
             )
-            for movie_identifier, combined_score, _ in recommendation_rows.itertuples(index=False, name=None)
+            for movie_identifier, combined_score, _, _ in recommendation_rows.itertuples(index=False, name=None)
+        ]
+
+    def _recommend_with_popularity_genre_coverage_strategy(
+        self,
+        working_dataframe: pd.DataFrame,
+        number_of_recommendations: int,
+    ) -> list[ColdStartRecommendation]:
+        """Returns popularity-only recommendations with greedy genre coverage.
+
+        The candidate list is sorted by ratings_count and bayesian_score only.
+        Then a greedy pass picks items that add unseen genres first.
+
+        Args:
+            working_dataframe: Candidate dataframe.
+            number_of_recommendations: Number of rows to return.
+
+        Returns:
+            list[ColdStartRecommendation]: Ranked recommendations.
+        """
+        if working_dataframe.empty:
+            return []
+
+        # Use pure popularity ordering as the candidate pool.
+        candidate_dataframe = working_dataframe.sort_values(
+            ["ratings_count", "bayesian_score", "movieId"],
+            ascending=[False, False, True],
+        ).copy()
+
+        selected_movie_identifiers: list[int] = []
+        covered_genres: set[str] = set()
+
+        candidate_movie_identifiers = candidate_dataframe["movieId"].astype(int).tolist()
+
+        # First pass: keep only popular items that add a new genre when possible.
+        for movie_identifier in candidate_movie_identifiers:
+            movie_genres = self._movie_id_to_genres_map.get(int(movie_identifier), set())
+            if movie_genres and movie_genres.issubset(covered_genres):
+                continue
+            selected_movie_identifiers.append(int(movie_identifier))
+            covered_genres.update(movie_genres)
+            if len(selected_movie_identifiers) >= number_of_recommendations:
+                break
+
+        # Second pass: fill remaining slots by popularity order.
+        if len(selected_movie_identifiers) < number_of_recommendations:
+            selected_movie_identifier_set = set(selected_movie_identifiers)
+            for movie_identifier in candidate_movie_identifiers:
+                movie_identifier_int = int(movie_identifier)
+                if movie_identifier_int in selected_movie_identifier_set:
+                    continue
+                selected_movie_identifiers.append(movie_identifier_int)
+                selected_movie_identifier_set.add(movie_identifier_int)
+                if len(selected_movie_identifiers) >= number_of_recommendations:
+                    break
+
+        score_map = {
+            int(movie_identifier): float(ratings_count)
+            for movie_identifier, ratings_count in candidate_dataframe[["movieId", "ratings_count"]].itertuples(
+                index=False, name=None
+            )
+        }
+
+        return [
+            ColdStartRecommendation(
+                movie_identifier=movie_identifier,
+                score_value=float(score_map.get(movie_identifier, 0.0)),
+            )
+            for movie_identifier in selected_movie_identifiers[:number_of_recommendations]
         ]
 
     @staticmethod

@@ -8,6 +8,8 @@ import pandas as pd
 
 from src.models.base_model import BaseModel
 from src.models.cold_start import BayesianColdStartRanker
+from src.models.item_knn_model import ItemKNNModel
+from src.models.svd_model import SVDModel
 
 
 @dataclass(slots=True)
@@ -101,16 +103,30 @@ class RecommenderInferenceRouter:
                 pass
 
         seen_movie_identifiers = self._user_seen_movie_map.get(user_identifier_int, set())
+        fallback_strategy_name = self._resolve_cold_start_strategy_name()
         fallback_recommendations = self.cold_start_ranker.recommend(
             number_of_recommendations=number_of_recommendations,
             exclude_movie_identifiers=seen_movie_identifiers,
             preferred_genres=preferred_genres,
+            strategy_name=fallback_strategy_name,
         )
 
         return RecommendationResult(
-            source_name="cold_start_fallback",
+            source_name=f"cold_start_fallback:{fallback_strategy_name}",
             recommendations=[
                 (recommendation.movie_identifier, recommendation.score_value)
                 for recommendation in fallback_recommendations
             ],
         )
+
+    def _resolve_cold_start_strategy_name(self) -> str:
+        """Returns fallback strategy name based on model family.
+
+        Returns:
+            str: Strategy name for cold-start recommendations.
+        """
+        if isinstance(self.trained_model, (SVDModel, ItemKNNModel)):
+            # Use popularity-only fallback with genre coverage for Surprise models.
+            return "popular_genre_coverage"
+        return "blended"
+

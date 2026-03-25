@@ -178,6 +178,75 @@ def _cosine_similarity(left_vector: np.ndarray, right_vector: np.ndarray) -> flo
     return float(np.dot(left_vector, right_vector) / (left_norm * right_norm))
 
 
+def calculate_item_coverage_at_k(
+    recommendations_by_user: dict[int, list[int]],
+    recommendable_movie_ids: set[int],
+) -> float:
+    """Calculates item coverage over the recommendable catalog.
+
+    Args:
+        recommendations_by_user: Recommended movie ids by user.
+        recommendable_movie_ids: Candidate movie ids considered recommendable.
+
+    Returns:
+        float: Coverage ratio in [0, 1].
+    """
+    if not recommendations_by_user or not recommendable_movie_ids:
+        return 0.0
+
+    recommended_movie_ids = {
+        int(movie_identifier)
+        for movie_identifiers in recommendations_by_user.values()
+        for movie_identifier in movie_identifiers
+    }
+    covered_movie_ids = recommended_movie_ids.intersection(
+        {int(movie_identifier) for movie_identifier in recommendable_movie_ids}
+    )
+    return float(len(covered_movie_ids) / float(len(recommendable_movie_ids)))
+
+
+def calculate_intra_list_similarity_at_k(
+    recommendations_by_user: dict[int, list[int]],
+    movies_dataframe: pd.DataFrame,
+) -> float:
+    """Calculates mean intra-list similarity using cosine similarity.
+
+    Args:
+        recommendations_by_user: Recommended movie ids by user.
+        movies_dataframe: Movies dataframe with one-hot genre columns.
+
+    Returns:
+        float: Mean pairwise cosine similarity in recommendation lists.
+    """
+    if not recommendations_by_user or movies_dataframe.empty:
+        return 0.0
+
+    movie_vector_map = _build_movie_vector_map(movies_dataframe)
+    if not movie_vector_map:
+        return 0.0
+
+    user_similarity_values: list[float] = []
+
+    for movie_identifiers in recommendations_by_user.values():
+        if len(movie_identifiers) < 2:
+            continue
+
+        pair_similarities: list[float] = []
+        for left_movie_id, right_movie_id in itertools.combinations(movie_identifiers, 2):
+            left_vector = movie_vector_map.get(int(left_movie_id))
+            right_vector = movie_vector_map.get(int(right_movie_id))
+            if left_vector is None or right_vector is None:
+                continue
+            pair_similarities.append(_cosine_similarity(left_vector, right_vector))
+
+        if pair_similarities:
+            user_similarity_values.append(float(np.mean(pair_similarities)))
+
+    if not user_similarity_values:
+        return 0.0
+    return float(np.mean(user_similarity_values))
+
+
 def calculate_diversity_at_k(
     recommendations_by_user: dict[int, list[int]],
     movies_dataframe: pd.DataFrame,
@@ -191,48 +260,22 @@ def calculate_diversity_at_k(
     Returns:
         float: Mean pairwise cosine distance in recommendation lists.
     """
-    if not recommendations_by_user or movies_dataframe.empty:
-        return 0.0
-
-    movie_vector_map = _build_movie_vector_map(movies_dataframe)
-    if not movie_vector_map:
-        return 0.0
-
-    user_diversity_values: list[float] = []
-
-    for movie_identifiers in recommendations_by_user.values():
-        if len(movie_identifiers) < 2:
-            continue
-        pair_distances: list[float] = []
-        for left_movie_id, right_movie_id in itertools.combinations(movie_identifiers, 2):
-            left_vector = movie_vector_map.get(int(left_movie_id))
-            right_vector = movie_vector_map.get(int(right_movie_id))
-            if left_vector is None or right_vector is None:
-                continue
-            left_norm = float(np.linalg.norm(left_vector))
-            right_norm = float(np.linalg.norm(right_vector))
-            if left_norm == 0.0 or right_norm == 0.0:
-                continue
-            cosine_similarity_value = float(np.dot(left_vector, right_vector) / (left_norm * right_norm))
-            pair_distances.append(1.0 - cosine_similarity_value)
-
-        if pair_distances:
-            user_diversity_values.append(float(np.mean(pair_distances)))
-
-    if not user_diversity_values:
-        return 0.0
-    return float(np.mean(user_diversity_values))
+    intra_list_similarity_at_k = calculate_intra_list_similarity_at_k(
+        recommendations_by_user=recommendations_by_user,
+        movies_dataframe=movies_dataframe,
+    )
+    return float(max(0.0, 1.0 - intra_list_similarity_at_k))
 
 
-def calculate_serendipity_at_k(
+def calculate_item_to_history_distance_at_k(
     recommendations_by_user: dict[int, list[int]],
     user_seen_items: dict[int, set[int]],
     movies_dataframe: pd.DataFrame,
 ) -> float:
-    """Calculates serendipity using distance from seen-item profiles.
+    """Calculates novelty as distance between recommendations and user history.
 
-    A recommendation is more serendipitous when it is less similar to the
-    user's historical items while still being recommended by the model.
+    For each recommended movie, this metric uses the closest seen movie in
+    feature space and reports one minus cosine similarity.
 
     Args:
         recommendations_by_user: Recommended movie ids by user.
@@ -240,7 +283,7 @@ def calculate_serendipity_at_k(
         movies_dataframe: Movies dataframe with one-hot genre columns.
 
     Returns:
-        float: Mean serendipity score.
+        float: Mean item-to-history distance score.
     """
     if not recommendations_by_user or not user_seen_items:
         return 0.0
@@ -249,7 +292,7 @@ def calculate_serendipity_at_k(
     if not movie_vector_map:
         return 0.0
 
-    user_serendipity_values: list[float] = []
+    user_distance_values: list[float] = []
 
     for user_identifier, recommended_movie_ids in recommendations_by_user.items():
         seen_movie_ids = user_seen_items.get(int(user_identifier), set())
@@ -260,22 +303,47 @@ def calculate_serendipity_at_k(
         if not seen_vectors:
             continue
 
-        recommendation_serendipity_values: list[float] = []
+        recommendation_distance_values: list[float] = []
         for recommended_movie_id in recommended_movie_ids:
-            if int(recommended_movie_id) not in movie_vector_map:
+            recommended_vector = movie_vector_map.get(int(recommended_movie_id))
+            if recommended_vector is None:
                 continue
-            recommended_vector = movie_vector_map[int(recommended_movie_id)]
+
+            # Use closest history item to measure how far the recommendation is.
             max_similarity_to_history = max(
                 _cosine_similarity(recommended_vector, seen_vector) for seen_vector in seen_vectors
             )
-            recommendation_serendipity_values.append(1.0 - max_similarity_to_history)
+            recommendation_distance_values.append(1.0 - max_similarity_to_history)
 
-        if recommendation_serendipity_values:
-            user_serendipity_values.append(float(np.mean(recommendation_serendipity_values)))
+        if recommendation_distance_values:
+            user_distance_values.append(float(np.mean(recommendation_distance_values)))
 
-    if not user_serendipity_values:
+    if not user_distance_values:
         return 0.0
-    return float(np.mean(user_serendipity_values))
+    return float(np.mean(user_distance_values))
+
+
+def calculate_serendipity_at_k(
+    recommendations_by_user: dict[int, list[int]],
+    user_seen_items: dict[int, set[int]],
+    movies_dataframe: pd.DataFrame,
+) -> float:
+    """Calculates serendipity using distance from seen-item profiles.
+
+    Args:
+        recommendations_by_user: Recommended movie ids by user.
+        user_seen_items: Seen movie ids by user from train data.
+        movies_dataframe: Movies dataframe with one-hot genre columns.
+
+    Returns:
+        float: Mean serendipity score.
+    """
+    # Keep behavior aligned with history-distance novelty for now.
+    return calculate_item_to_history_distance_at_k(
+        recommendations_by_user=recommendations_by_user,
+        user_seen_items=user_seen_items,
+        movies_dataframe=movies_dataframe,
+    )
 
 
 def _calculate_discounted_cumulative_gain(relevance_values: list[float]) -> float:

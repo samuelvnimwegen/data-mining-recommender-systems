@@ -41,6 +41,11 @@ Settings are stored in `src/configs/config.py` in the `CleanerConfig` dataclass.
 - `notebooks/05_lightfm_usage.ipynb`: Shows LightFM hybrid training with engineered item features.
 - `notebooks/06_ratings_splitter_usage.ipynb`: Shows how to create and save the deterministic 70/30 train/validation split.
 - `notebooks/07_grid_search_usage.ipynb`: Runs hyperparameter grid search for ItemKNN, SVD, and LightFM.
+- `notebooks/08_task2_predictions_usage.ipynb`: Generates top-10 recommendations for each user in `data/raw/ratings_test.csv` and writes a filled submission CSV.
+
+## Report template
+
+- `assignment2_report_latex.txt`: LaTeX report template for Task 1 and Task 2 write-up.
 
 ## Quick run
 
