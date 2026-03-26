@@ -277,14 +277,8 @@ def _run_evaluation_and_inference(
         print(f"Novelty@{parsed_arguments.top_n}: {evaluation_result.novelty_at_k:.4f}")
         print(f"Diversity@{parsed_arguments.top_n}: {evaluation_result.diversity_at_k:.4f}")
         print(f"ItemCoverage@{parsed_arguments.top_n}: {evaluation_result.item_coverage_at_k:.4f}")
-        print(
-            f"IntraListSimilarity@{parsed_arguments.top_n}: "
-            f"{evaluation_result.intra_list_similarity_at_k:.4f}"
-        )
-        print(
-            f"ItemToHistoryDistance@{parsed_arguments.top_n}: "
-            f"{evaluation_result.item_to_history_distance_at_k:.4f}"
-        )
+        print(f"IntraListSimilarity@{parsed_arguments.top_n}: {evaluation_result.intra_list_similarity_at_k:.4f}")
+        print(f"ItemToHistoryDistance@{parsed_arguments.top_n}: {evaluation_result.item_to_history_distance_at_k:.4f}")
         print(f"Serendipity@{parsed_arguments.top_n}: {evaluation_result.serendipity_at_k:.4f}")
 
     if parsed_arguments.run_task2_inference:
@@ -406,7 +400,7 @@ def main(command_line_arguments: list[str] | None = None) -> int:
     """
     try:
         workspace_root_path = Path(__file__).resolve().parent
-    except NameError:  # pragma: no cover - exercised in tests
+    except NameError:
         workspace_root_path = Path.cwd()
 
     argument_parser = build_argument_parser()

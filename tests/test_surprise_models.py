@@ -9,6 +9,26 @@ from src.models.item_knn_model import ItemKNNModel
 from src.models.svd_model import SVDModel
 
 
+def _build_seen_movies_by_user(ratings_dataframe: pd.DataFrame) -> dict[int, set[int]]:
+    """Builds per-user movie history sets from ratings.
+
+    Args:
+        ratings_dataframe: Ratings interactions used by tests.
+
+    Returns:
+        dict[int, set[int]]: Mapping from user id to seen movie ids.
+    """
+    normalized_ids_dataframe = ratings_dataframe[["userId", "movieId"]].copy()
+    normalized_ids_dataframe["userId"] = normalized_ids_dataframe["userId"].astype(int)
+    normalized_ids_dataframe["movieId"] = normalized_ids_dataframe["movieId"].astype(int)
+
+    grouped_history_dataframe = normalized_ids_dataframe.groupby("userId")["movieId"].apply(set)
+    return {
+        user_identifier: set(seen_movie_ids)
+        for user_identifier, seen_movie_ids in grouped_history_dataframe.items()
+    }
+
+
 @pytest.fixture
 def ratings_dataframe() -> pd.DataFrame:
     """Builds a small ratings dataframe for model tests.
@@ -80,3 +100,26 @@ def test_recommend_top_n_raises_for_unknown_user(ratings_dataframe: pd.DataFrame
 
     with pytest.raises(ValueError, match="Unknown user id"):
         item_knn_model.recommend_top_n(user_identifier=999, number_of_recommendations=5)
+
+
+def test_surprise_models_never_recommend_seen_history_movies(ratings_dataframe: pd.DataFrame) -> None:
+    """Checks ItemKNN and SVD never return movies from user history."""
+    model_entries = [
+        ("itemknn", ItemKNNModel(number_of_neighbors=2, minimum_neighbors=1)),
+        ("svd", SVDModel(number_of_factors=10, number_of_epochs=10, random_seed=7)),
+    ]
+    seen_movies_by_user = _build_seen_movies_by_user(ratings_dataframe)
+
+    for _, recommender_model in model_entries:
+        recommender_model.fit(ratings_dataframe)
+
+        for user_identifier, seen_movie_identifiers in seen_movies_by_user.items():
+            recommendations = recommender_model.recommend_top_n(
+                user_identifier=user_identifier,
+                number_of_recommendations=10,
+            )
+            recommended_movie_identifiers = {
+                recommendation_movie_id for recommendation_movie_id, _ in recommendations
+            }
+
+            assert recommended_movie_identifiers.isdisjoint(seen_movie_identifiers)

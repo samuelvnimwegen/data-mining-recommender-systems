@@ -129,4 +129,3 @@ class RecommenderInferenceRouter:
             # Use popularity-only fallback with genre coverage for Surprise models.
             return "popular_genre_coverage"
         return "blended"
-

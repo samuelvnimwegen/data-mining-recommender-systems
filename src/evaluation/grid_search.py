@@ -39,16 +39,22 @@ class GridSearchConfig:
 
     # List of model names to include in the grid search.
     selected_model_names: list[str]
+
     # Metric used to pick the best configuration for each model.
     metric_name: str = "rmse_value"
+
     # Top-K used by ranking metrics like precision@K and recall@K.
     number_of_recommendations: int = 10
+
     # Threshold used to binarize ratings for ranking metrics.
     relevance_threshold: float = 4.0
+
     # Optional cap on trials to bound runtime for expensive grids.
     maximum_trials_per_model: int | None = None
+
     # Where to write per-model artifacts (CSV + JSON).
     output_directory_path: Path = Path("data/processed/grid_search")
+
     # Toggle progress bars for model/trial loops.
     enable_progress_bar: bool = True
 

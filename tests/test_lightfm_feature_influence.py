@@ -56,4 +56,3 @@ def test_lightfm_feature_influence_returns_direction_labels() -> None:
     }
     assert set(influence_dataframe["feature_name"].tolist()) == {"genre_Action", "genre_Comedy", "release_year"}
     assert set(influence_dataframe["influence_direction"].tolist()).issubset({"positive", "negative", "neutral"})
-

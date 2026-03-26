@@ -79,7 +79,7 @@ class LightFMHybridModel(BaseModel):
         self.item_id_to_index_map: dict[str, int] = {}
         self.index_to_item_id_map: dict[int, str] = {}
 
-    def fit(self, ratings_dataframe: pd.DataFrame, movies_dataframe: pd.DataFrame) -> None:
+    def fit(self, ratings_dataframe: pd.DataFrame, movies_dataframe: pd.DataFrame | None = None) -> None:
         """Fits LightFM using ratings and engineered movie features.
 
         Args:

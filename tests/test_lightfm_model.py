@@ -8,6 +8,26 @@ import pytest
 from src.models.lightfm_model import LightFMHybridModel
 
 
+def _build_seen_movies_by_user(ratings_dataframe: pd.DataFrame) -> dict[int, set[int]]:
+    """Builds per-user movie history sets from ratings.
+
+    Args:
+        ratings_dataframe: Ratings interactions used by tests.
+
+    Returns:
+        dict[int, set[int]]: Mapping from user id to seen movie ids.
+    """
+    normalized_ids_dataframe = ratings_dataframe[["userId", "movieId"]].copy()
+    normalized_ids_dataframe["userId"] = normalized_ids_dataframe["userId"].astype(int)
+    normalized_ids_dataframe["movieId"] = normalized_ids_dataframe["movieId"].astype(int)
+
+    grouped_history_dataframe = normalized_ids_dataframe.groupby("userId")["movieId"].apply(set)
+    return {
+        user_identifier: set(seen_movie_ids)
+        for user_identifier, seen_movie_ids in grouped_history_dataframe.items()
+    }
+
+
 @pytest.fixture
 def ratings_dataframe() -> pd.DataFrame:
     """Builds a small ratings dataframe for LightFM tests.
@@ -92,3 +112,24 @@ def test_lightfm_raises_when_missing_feature_columns(ratings_dataframe: pd.DataF
 
     with pytest.raises(ValueError, match="No engineered feature columns found"):
         lightfm_model.fit(ratings_dataframe=ratings_dataframe, movies_dataframe=movies_dataframe_without_features)
+
+
+def test_lightfm_never_recommends_seen_history_movies(
+    ratings_dataframe: pd.DataFrame,
+    movies_feature_dataframe: pd.DataFrame,
+) -> None:
+    """Checks LightFM never returns movies from user history."""
+    lightfm_model = LightFMHybridModel(number_of_components=8, number_of_epochs=8, random_seed=7)
+    lightfm_model.fit(ratings_dataframe=ratings_dataframe, movies_dataframe=movies_feature_dataframe)
+
+    seen_movies_by_user = _build_seen_movies_by_user(ratings_dataframe)
+    for user_identifier, seen_movie_identifiers in seen_movies_by_user.items():
+        recommendations = lightfm_model.recommend_top_n(
+            user_identifier=user_identifier,
+            number_of_recommendations=10,
+        )
+        recommended_movie_identifiers = {
+            recommendation_movie_id for recommendation_movie_id, _ in recommendations
+        }
+
+        assert recommended_movie_identifiers.isdisjoint(seen_movie_identifiers)
