@@ -66,7 +66,7 @@ Outputs are written to `data/processed/` by default.
 
 Model wrappers are implemented in `src/models/`:
 
-- `src/models/item_knn_model.py`: Item-based collaborative filtering (`KNNBasic`, `user_based=False`).
+- `src/models/item_knn_model.py`: Item-based collaborative filtering (`KNNWithMeans`, `user_based=False`).
 - `src/models/svd_model.py`: Matrix factorization (`SVD`).
 - `src/models/lightfm_model.py`: Hybrid recommender (`LightFM`) using engineered item features.
 - `src/models/cold_start.py`: Bayesian fallback ranker for unseen or low-activity users.

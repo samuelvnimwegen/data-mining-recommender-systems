@@ -13,7 +13,7 @@ from src.evaluation.metrics import calculate_item_to_history_distance_at_k
 from src.evaluation.metrics import calculate_mae
 from src.evaluation.metrics import calculate_ndcg_at_k
 from src.evaluation.metrics import calculate_novelty_at_k
-from src.evaluation.metrics import calculate_precision_recall_at_k
+from src.evaluation.metrics import calculate_precision_recall_at_k_from_recommendations
 from src.evaluation.metrics import calculate_rmse
 from src.evaluation.metrics import calculate_serendipity_at_k
 from src.models.base_model import BaseModel
@@ -136,31 +136,56 @@ class OfflineRecommenderEvaluator:
             true_values=predictions_dataframe["true_rating"].tolist(),
             predicted_values=predictions_dataframe["predicted_rating"].tolist(),
         )
-        precision_at_k, recall_at_k = calculate_precision_recall_at_k(
-            predictions_dataframe=predictions_dataframe,
-            number_of_recommendations=self.number_of_recommendations,
-            relevance_threshold=self.relevance_threshold,
-        )
-        ndcg_at_k = calculate_ndcg_at_k(
-            predictions_dataframe=predictions_dataframe,
-            number_of_recommendations=self.number_of_recommendations,
-            relevance_threshold=self.relevance_threshold,
-        )
+        # Keep only relevant holdout rows for ranking metrics.
+        relevant_validation_dataframe = validation_dataframe[
+            validation_dataframe["rating"] >= self.relevance_threshold
+        ].copy()
 
         recommendation_map: dict[int, list[int]] = {}
+        ndcg_prediction_rows: list[dict[str, int | float]] = []
         for user_identifier in sorted(validation_dataframe["userId"].astype(int).unique().tolist()):
             if inference_router is not None:
                 result = inference_router.recommend_for_user(
                     user_identifier=user_identifier,
                     number_of_recommendations=self.number_of_recommendations,
                 )
-                recommendation_map[user_identifier] = [movie_id for movie_id, _ in result.recommendations]
+                ranked_recommendations = result.recommendations
             else:
-                recommendations = model.recommend_top_n(
+                ranked_recommendations = model.recommend_top_n(
                     user_identifier=user_identifier,
                     number_of_recommendations=self.number_of_recommendations,
                 )
-                recommendation_map[user_identifier] = [movie_id for movie_id, _ in recommendations]
+
+            recommendation_map[user_identifier] = [int(movie_id) for movie_id, _ in ranked_recommendations]
+
+            # Keep rank order so NDCG uses the same list the user receives.
+            for movie_id, predicted_score in ranked_recommendations:
+                ndcg_prediction_rows.append(
+                    {
+                        "userId": int(user_identifier),
+                        "movieId": int(movie_id),
+                        "predicted_rating": float(predicted_score),
+                    }
+                )
+
+        precision_at_k, recall_at_k = calculate_precision_recall_at_k_from_recommendations(
+            recommendations_by_user=recommendation_map,
+            test_out=relevant_validation_dataframe,
+            number_of_recommendations=self.number_of_recommendations,
+        )
+
+        ndcg_predictions_dataframe = pd.DataFrame(
+            ndcg_prediction_rows,
+            columns=["userId", "movieId", "predicted_rating"],
+        )
+        if relevant_validation_dataframe.empty:
+            ndcg_at_k = 0.0
+        else:
+            ndcg_at_k = calculate_ndcg_at_k(
+                predictions_dataframe=ndcg_predictions_dataframe,
+                number_of_recommendations=self.number_of_recommendations,
+                test_out=relevant_validation_dataframe,
+            )
 
         movie_popularity_counts = (
             train_dataframe["movieId"].astype(int).value_counts().to_dict() if not train_dataframe.empty else {}

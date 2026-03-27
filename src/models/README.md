@@ -12,7 +12,7 @@ Architectural purpose
 Contents
 
 - `base_model.py`: Shared interface for all models.
-- `item_knn_model.py`: Item-based collaborative filtering using Surprise `KNNBasic`.
+- `item_knn_model.py`: Item-based collaborative filtering using Surprise `KNNWithMeans`.
 - `svd_model.py`: Matrix factorization using Surprise `SVD`.
 - `lightfm_model.py`: Hybrid recommender using LightFM with engineered item features.
 - `surprise_utils.py`: Shared helpers for Surprise trainsets and unseen filtering.

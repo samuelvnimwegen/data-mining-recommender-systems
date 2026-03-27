@@ -9,8 +9,10 @@ from src.evaluation.metrics import calculate_intra_list_similarity_at_k
 from src.evaluation.metrics import calculate_item_coverage_at_k
 from src.evaluation.metrics import calculate_item_to_history_distance_at_k
 from src.evaluation.metrics import calculate_mae
+from src.evaluation.metrics import calculate_ndcg_at_k
 from src.evaluation.metrics import calculate_novelty_at_k
 from src.evaluation.metrics import calculate_precision_recall_at_k
+from src.evaluation.metrics import calculate_precision_recall_at_k_from_recommendations
 from src.evaluation.metrics import calculate_rmse
 from src.evaluation.metrics import calculate_serendipity_at_k
 from src.evaluation.pipeline import OfflineRecommenderEvaluator
@@ -110,6 +112,54 @@ def test_precision_recall_at_k_function() -> None:
     assert round(recall_value, 4) == 1.0
 
 
+def test_precision_recall_from_recommendations_function() -> None:
+    """Checks top-N precision and recall computed from recommendation lists."""
+    recommendations_by_user = {
+        1: [10, 11],
+        2: [20, 21],
+    }
+    test_out_dataframe = pd.DataFrame(
+        {
+            "userId": [1, 1, 2],
+            "movieId": [10, 12, 21],
+            "rating": [5.0, 4.0, 5.0],
+        }
+    )
+
+    precision_value, recall_value = calculate_precision_recall_at_k_from_recommendations(
+        recommendations_by_user=recommendations_by_user,
+        test_out=test_out_dataframe,
+        number_of_recommendations=2,
+    )
+
+    assert round(precision_value, 4) == 0.5
+    assert round(recall_value, 4) == 0.75
+
+
+def test_ndcg_at_k_is_not_perfect_for_missed_hits() -> None:
+    """Checks NDCG stays below one when top-K misses relevant items."""
+    predictions_dataframe = pd.DataFrame(
+        {
+            "userId": [1, 1, 2, 2],
+            "movieId": [10, 11, 20, 21],
+        }
+    )
+    test_out_dataframe = pd.DataFrame(
+        {
+            "userId": [1, 1, 2],
+            "movieId": [10, 12, 21],
+        }
+    )
+
+    ndcg_value = calculate_ndcg_at_k(
+        predictions_dataframe=predictions_dataframe,
+        number_of_recommendations=2,
+        test_out=test_out_dataframe,
+    )
+
+    assert 0.0 < ndcg_value < 1.0
+
+
 def test_novelty_and_diversity_functions() -> None:
     """Checks beyond-accuracy metric helpers return positive values."""
     recommendations_by_user = {1: [1, 2], 2: [2, 3]}
@@ -201,6 +251,7 @@ def test_offline_evaluator_runs_end_to_end() -> None:
     assert result.mae_value >= 0.0
     assert 0.0 <= result.precision_at_k <= 1.0
     assert 0.0 <= result.recall_at_k <= 1.0
+    assert 0.0 <= result.ndcg_at_k <= 1.0
     assert result.novelty_at_k >= 0.0
     assert result.diversity_at_k >= 0.0
     assert 0.0 <= result.item_coverage_at_k <= 1.0
@@ -267,3 +318,4 @@ def test_diversity_handles_non_identifier_genre_column_names() -> None:
     )
 
     assert diversity_value >= 0.0
+

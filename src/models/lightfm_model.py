@@ -41,6 +41,10 @@ class LightFMHybridModel(BaseModel):
         learning_rate_value: Learning rate for optimization.
         loss_name: LightFM loss function.
         random_seed: Random seed for reproducibility.
+        diversity_rerank_weight: Diversity weight in [0, 1] for optional
+            post-ranking rerank. Zero keeps pure LightFM score ranking.
+        rerank_candidate_multiplier: Candidate pool size multiplier used for
+            reranking before final top-N selection.
         minimum_rating_value: Lower rating bound.
         maximum_rating_value: Upper rating bound.
     """
@@ -52,6 +56,8 @@ class LightFMHybridModel(BaseModel):
         learning_rate_value: float = 0.05,
         loss_name: str = "warp",
         random_seed: int = 42,
+        diversity_rerank_weight: float = 0.0,
+        rerank_candidate_multiplier: int = 5,
         minimum_rating_value: float = 0.5,
         maximum_rating_value: float = 5.0,
     ) -> None:
@@ -60,11 +66,18 @@ class LightFMHybridModel(BaseModel):
             minimum_rating_value=minimum_rating_value,
             maximum_rating_value=maximum_rating_value,
         )
+        if not 0.0 <= diversity_rerank_weight <= 1.0:
+            raise ValueError("diversity_rerank_weight must be between 0.0 and 1.0.")
+        if rerank_candidate_multiplier < 1:
+            raise ValueError("rerank_candidate_multiplier must be at least 1.")
+
         self.number_of_components: int = number_of_components
         self.number_of_epochs: int = number_of_epochs
         self.learning_rate_value: float = learning_rate_value
         self.loss_name: str = loss_name
         self.random_seed: int = random_seed
+        self.diversity_rerank_weight: float = diversity_rerank_weight
+        self.rerank_candidate_multiplier: int = rerank_candidate_multiplier
 
         self.algorithm = LightFM(
             no_components=self.number_of_components,
@@ -207,7 +220,122 @@ class LightFMHybridModel(BaseModel):
             recommendation_tuples.append((int(raw_item_identifier), float(predicted_score_value)))
 
         recommendation_tuples.sort(key=lambda recommendation_tuple: recommendation_tuple[1], reverse=True)
-        return recommendation_tuples[:number_of_recommendations]
+
+        # Keep default behavior when rerank is disabled.
+        if self.diversity_rerank_weight <= 0.0:
+            return recommendation_tuples[:number_of_recommendations]
+
+        # Rerank only a top candidate pool to keep strong relevance.
+        candidate_pool_size = min(
+            len(recommendation_tuples),
+            max(number_of_recommendations, number_of_recommendations * self.rerank_candidate_multiplier),
+        )
+        candidate_tuples = recommendation_tuples[:candidate_pool_size]
+        return self._rerank_candidates_with_diversity(
+            candidate_tuples=candidate_tuples,
+            number_of_recommendations=number_of_recommendations,
+        )
+
+    def _rerank_candidates_with_diversity(
+        self,
+        candidate_tuples: list[tuple[int, float]],
+        number_of_recommendations: int,
+    ) -> list[tuple[int, float]]:
+        """Reranks candidates with a simple MMR-style objective.
+
+        Args:
+            candidate_tuples: Candidate (movieId, score) tuples sorted by score.
+            number_of_recommendations: Number of items to return.
+
+        Returns:
+            list[tuple[int, float]]: Reranked recommendations.
+        """
+        if not candidate_tuples:
+            return []
+
+        relevance_values = np.array([score_value for _, score_value in candidate_tuples], dtype=float)
+        minimum_score_value = float(relevance_values.min())
+        maximum_score_value = float(relevance_values.max())
+        if maximum_score_value > minimum_score_value:
+            normalized_relevance_values = (relevance_values - minimum_score_value) / (maximum_score_value - minimum_score_value)
+        else:
+            normalized_relevance_values = np.ones_like(relevance_values)
+
+        remaining_positions = list(range(len(candidate_tuples)))
+        selected_positions: list[int] = []
+
+        while remaining_positions and len(selected_positions) < number_of_recommendations:
+            best_position: int | None = None
+            best_objective_value = -np.inf
+
+            for candidate_position in remaining_positions:
+                relevance_value = float(normalized_relevance_values[candidate_position])
+                novelty_value = 1.0
+
+                if selected_positions:
+                    candidate_movie_identifier = candidate_tuples[candidate_position][0]
+                    candidate_vector = self._get_item_feature_vector(candidate_movie_identifier)
+
+                    if candidate_vector is not None:
+                        max_similarity_value = 0.0
+                        for selected_position in selected_positions:
+                            selected_movie_identifier = candidate_tuples[selected_position][0]
+                            selected_vector = self._get_item_feature_vector(selected_movie_identifier)
+                            if selected_vector is None:
+                                continue
+                            similarity_value = self._calculate_cosine_similarity(candidate_vector, selected_vector)
+                            if similarity_value > max_similarity_value:
+                                max_similarity_value = similarity_value
+                        novelty_value = 1.0 - max_similarity_value
+
+                objective_value = (
+                    (1.0 - self.diversity_rerank_weight) * relevance_value
+                    + self.diversity_rerank_weight * novelty_value
+                )
+                if objective_value > best_objective_value:
+                    best_objective_value = objective_value
+                    best_position = candidate_position
+
+            selected_positions.append(best_position)
+            remaining_positions.remove(best_position)
+
+        return [candidate_tuples[selected_position] for selected_position in selected_positions]
+
+    def _get_item_feature_vector(self, movie_identifier: int) -> np.ndarray | None:
+        """Gets one dense item feature vector by movie id.
+
+        Args:
+            movie_identifier: Raw movie id.
+
+        Returns:
+            np.ndarray | None: Dense feature vector or None.
+        """
+        raw_movie_identifier = str(int(movie_identifier))
+        item_index_value = self.item_id_to_index_map.get(raw_movie_identifier)
+        if item_index_value is None:
+            return None
+
+        feature_row = self.feature_matrices.item_features_matrix.getrow(item_index_value)
+        if feature_row.nnz == 0:
+            return None
+        return feature_row.toarray().ravel()
+
+    @staticmethod
+    def _calculate_cosine_similarity(left_vector: np.ndarray, right_vector: np.ndarray) -> float:
+        """Calculates cosine similarity with safe zero checks.
+
+        Args:
+            left_vector: Left feature vector.
+            right_vector: Right feature vector.
+
+        Returns:
+            float: Cosine similarity in [0, 1] for non-negative vectors.
+        """
+        left_norm_value = float(np.linalg.norm(left_vector))
+        right_norm_value = float(np.linalg.norm(right_vector))
+        if left_norm_value == 0.0 or right_norm_value == 0.0:
+            return 0.0
+        return float(np.dot(left_vector, right_vector) / (left_norm_value * right_norm_value))
 
     def _validate_fitted(self) -> None:
         """Checks if model internals are ready for inference."""
@@ -318,9 +446,10 @@ class LightFMHybridModel(BaseModel):
         Returns:
             _LightFMFeatureMatrices: Sparse matrices required by LightFM fitting.
         """
+        selected_rating_columns = ["userId", "movieId", "rating"]
         interaction_tuples = [
-            (str(int(row.userId)), str(int(row.movieId)), float(row.rating))
-            for row in ratings_dataframe.itertuples(index=False)
+            (str(int(row_values[0])), str(int(row_values[1])), float(row_values[2]))
+            for row_values in ratings_dataframe[selected_rating_columns].itertuples(index=False, name=None)
         ]
         interactions_matrix, interaction_weights_matrix = self.dataset.build_interactions(interaction_tuples)
 

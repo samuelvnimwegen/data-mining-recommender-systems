@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+from scipy import sparse
 
 from src.models.lightfm_model import LightFMHybridModel
+from src.models.lightfm_model import _LightFMFeatureMatrices
 
 
 def _build_seen_movies_by_user(ratings_dataframe: pd.DataFrame) -> dict[int, set[int]]:
@@ -133,3 +135,31 @@ def test_lightfm_never_recommends_seen_history_movies(
         }
 
         assert recommended_movie_identifiers.isdisjoint(seen_movie_identifiers)
+
+
+def test_lightfm_diversity_rerank_prefers_less_similar_items() -> None:
+    """Checks rerank picks a less similar item for diversity."""
+    lightfm_model = LightFMHybridModel(diversity_rerank_weight=0.7)
+
+    # Set maps and feature matrix directly to test rerank logic in isolation.
+    lightfm_model.item_id_to_index_map = {"10": 0, "11": 1, "12": 2}
+    lightfm_model.feature_matrices = _LightFMFeatureMatrices(
+        interactions_matrix=sparse.coo_matrix((3, 3)),
+        interaction_weights_matrix=sparse.coo_matrix((3, 3)),
+        item_features_matrix=sparse.csr_matrix(
+            [
+                [1.0, 0.0],
+                [0.95, 0.05],
+                [0.0, 1.0],
+            ]
+        ),
+    )
+
+    candidate_tuples = [(10, 0.90), (11, 0.88), (12, 0.82)]
+    reranked_tuples = lightfm_model._rerank_candidates_with_diversity(
+        candidate_tuples=candidate_tuples,
+        number_of_recommendations=2,
+    )
+
+    reranked_movie_identifiers = [movie_identifier for movie_identifier, _ in reranked_tuples]
+    assert reranked_movie_identifiers == [10, 12]

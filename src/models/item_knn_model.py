@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
-from surprise import KNNBasic
+from surprise import KNNWithMeans
 from surprise.trainset import Trainset
 
 from src.models.base_model import BaseModel
@@ -13,7 +13,7 @@ from src.models.surprise_utils import get_seen_inner_item_ids
 
 
 class ItemKNNModel(BaseModel):
-    """Wraps Surprise KNNBasic in item-based mode.
+    """Wraps Surprise KNNWithMeans in item-based mode.
 
     Args:
         number_of_neighbors: Number of neighbors used for prediction.
@@ -42,7 +42,7 @@ class ItemKNNModel(BaseModel):
         self.trainset: Trainset | None = None
 
         # Force item-based collaborative filtering.
-        self.algorithm = KNNBasic(
+        self.algorithm = KNNWithMeans(
             k=self.number_of_neighbors,
             min_k=self.minimum_neighbors,
             sim_options={"name": self.similarity_name, "user_based": False},

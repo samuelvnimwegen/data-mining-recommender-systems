@@ -102,6 +102,61 @@ def calculate_precision_recall_at_k(
     return float(np.mean(precision_values)), float(np.mean(recall_values))
 
 
+def calculate_precision_recall_at_k_from_recommendations(
+    recommendations_by_user: dict[int, list[int]],
+    test_out: pd.DataFrame,
+    number_of_recommendations: int,
+) -> tuple[float, float]:
+    """Calculates mean precision@K and recall@K from top-N recommendations.
+
+    Args:
+        recommendations_by_user: Recommended movie ids keyed by user id.
+        test_out: Ground-truth user-item interactions with userId and movieId.
+        number_of_recommendations: K for top-K metrics.
+
+    Returns:
+        tuple[float, float]: (precision_at_k, recall_at_k).
+
+    Raises:
+        ValueError: If test_out misses required columns.
+    """
+    if number_of_recommendations <= 0:
+        return 0.0, 0.0
+    if not recommendations_by_user or test_out.empty:
+        return 0.0, 0.0
+
+    required_columns = {"userId", "movieId"}
+    if not required_columns.issubset(set(test_out.columns)):
+        raise ValueError("test_out must contain userId and movieId columns.")
+
+    relevant_items_by_user = (
+        test_out.assign(
+            userId=test_out["userId"].astype(int),
+            movieId=test_out["movieId"].astype(int),
+        )
+        .groupby("userId")["movieId"]
+        .apply(lambda movie_series: set(movie_series.tolist()))
+        .to_dict()
+    )
+
+    precision_values: list[float] = []
+    recall_values: list[float] = []
+
+    # Use only users in test_out to match NDCG user scope.
+    for user_identifier, relevant_item_ids in relevant_items_by_user.items():
+        top_movie_ids = recommendations_by_user.get(int(user_identifier), [])[:number_of_recommendations]
+        if not relevant_item_ids:
+            continue
+
+        hit_count = len(set(int(movie_id) for movie_id in top_movie_ids).intersection(relevant_item_ids))
+        precision_values.append(hit_count / float(number_of_recommendations))
+        recall_values.append(hit_count / float(len(relevant_item_ids)))
+
+    if not precision_values:
+        return 0.0, 0.0
+    return float(np.mean(precision_values)), float(np.mean(recall_values))
+
+
 def calculate_novelty_at_k(
     recommendations_by_user: dict[int, list[int]],
     movie_popularity_counts: dict[int, int],
@@ -363,58 +418,89 @@ def _calculate_discounted_cumulative_gain(relevance_values: list[float]) -> floa
 
 def calculate_ndcg_at_k(
     predictions_dataframe: pd.DataFrame,
-    number_of_recommendations: int = 10,
-    relevance_threshold: float = 4.0,
+    number_of_recommendations: int,
+    test_out: pd.DataFrame,
 ) -> float:
-    """Calculates averaged NDCG@K from prediction rows.
+    """Calculates averaged hit-based NDCG@K.
 
-    Relevance is derived from explicit ratings by shifting ratings relative
-    to the threshold. Ratings below threshold become zero relevance.
+    This implementation follows a RecPack-style NDCG:
+    - Keep top-K unique recommendations per user in prediction order.
+    - Count hits by matching (user, item) pairs against ``test_out``.
+    - Weight hits by rank using ``1 / log2(rank + 2)``.
+    - Normalize per user with ideal DCG based on that user's relevant count.
 
     Args:
-        predictions_dataframe: Dataframe with userId, true_rating, predicted_rating.
-        number_of_recommendations: K for top-K metric.
-        relevance_threshold: Minimum rating that starts positive relevance.
+        predictions_dataframe: Predicted user-item interactions. Must contain
+            ``userId`` or ``user_id`` and ``movieId`` or ``item_id``.
+        number_of_recommendations: K for top-K metric. Must be at least 1.
+        test_out: Ground-truth user-item interactions for evaluation. Must contain
+            at least one row and the same user/item id columns used by predictions.
 
     Returns:
-        float: Mean NDCG@K value.
+        float: Mean NDCG@K across users in ``test_out``.
 
     Raises:
-        ValueError: If required columns are missing.
+        ValueError: If inputs are invalid or required columns are missing.
     """
-    required_columns = {"userId", "true_rating", "predicted_rating"}
-    if not required_columns.issubset(set(predictions_dataframe.columns)):
-        raise ValueError("predictions_dataframe must contain userId, true_rating and predicted_rating.")
-    if number_of_recommendations <= 0:
-        return 0.0
-    if predictions_dataframe.empty:
-        return 0.0
+    if number_of_recommendations < 1:
+        raise ValueError("number_of_recommendations must be at least 1")
+    if test_out.empty:
+        raise ValueError("test_out must contain at least one interaction.")
 
-    ndcg_values: list[float] = []
+    # Resolve user id column name.
+    if "user_id" in predictions_dataframe.columns:
+        user_column_name = "user_id"
+    elif "userId" in predictions_dataframe.columns:
+        user_column_name = "userId"
+    else:
+        raise ValueError("predictions_dataframe must contain user_id or userId column.")
 
-    for _, user_rows in predictions_dataframe.groupby("userId"):
-        sorted_rows = user_rows.sort_values("predicted_rating", ascending=False)
-        top_rows = sorted_rows.head(number_of_recommendations)
+    # Resolve item id column name.
+    if "item_id" in predictions_dataframe.columns:
+        item_column_name = "item_id"
+    elif "movieId" in predictions_dataframe.columns:
+        item_column_name = "movieId"
+    else:
+        raise ValueError("predictions_dataframe must contain item_id or movieId column.")
 
-        predicted_relevance_values = [
-            max(float(true_rating_value) - relevance_threshold + 1.0, 0.0)
-            for true_rating_value in top_rows["true_rating"].tolist()
-        ]
-        ideal_relevance_values = sorted(
-            [
-                max(float(true_rating_value) - relevance_threshold + 1.0, 0.0)
-                for true_rating_value in user_rows["true_rating"].tolist()
-            ],
-            reverse=True,
-        )[:number_of_recommendations]
+    if user_column_name not in test_out.columns or item_column_name not in test_out.columns:
+        raise ValueError("test_out must contain the same user and item id columns as predictions_dataframe.")
 
-        dcg_value = _calculate_discounted_cumulative_gain(predicted_relevance_values)
-        ideal_dcg_value = _calculate_discounted_cumulative_gain(ideal_relevance_values)
-        if ideal_dcg_value <= 0.0:
-            ndcg_values.append(0.0)
-        else:
-            ndcg_values.append(dcg_value / ideal_dcg_value)
+    # Align dtypes for join operations.
+    predictions_view = predictions_dataframe[[user_column_name, item_column_name]].copy()
+    predictions_view[user_column_name] = predictions_view[user_column_name].astype(int)
+    predictions_view[item_column_name] = predictions_view[item_column_name].astype(int)
 
-    if not ndcg_values:
-        return 0.0
-    return float(np.mean(ndcg_values))
+    test_out_view = test_out[[user_column_name, item_column_name]].copy()
+    test_out_view[user_column_name] = test_out_view[user_column_name].astype(int)
+    test_out_view[item_column_name] = test_out_view[item_column_name].astype(int)
+
+    # Keep the first (user, item) only and then take top-K per user.
+    unique_predictions_view = predictions_view.drop_duplicates(subset=[user_column_name, item_column_name])
+    top_k_predictions_view = unique_predictions_view.groupby(user_column_name, sort=False).head(number_of_recommendations)
+
+    # Add rank-based discount weights.
+    top_k_predictions_view = top_k_predictions_view.reset_index(drop=True)
+    top_k_predictions_view["_rank"] = top_k_predictions_view.groupby(user_column_name).cumcount()
+    top_k_predictions_view["_weight"] = 1.0 / np.log2(top_k_predictions_view["_rank"] + 2.0)
+
+    # Hits are recommendations that exist in the ground truth pairs.
+    hit_rows = pd.merge(top_k_predictions_view, test_out_view, on=[user_column_name, item_column_name], how="inner")
+    dcg_per_user = hit_rows.groupby(user_column_name)["_weight"].sum()
+
+    # Build ideal DCG values up to rank K.
+    rank_weight_vector = 1.0 / np.log2(np.arange(number_of_recommendations) + 2.0)
+    ideal_dcg_lookup = np.cumsum(rank_weight_vector)
+
+    # Build per-user ideal DCG from test_out relevant counts.
+    relevant_count_per_user = test_out_view[user_column_name].value_counts()
+    calibrated_relevant_counts = np.minimum(relevant_count_per_user, number_of_recommendations)
+    ideal_dcg_per_user = pd.Series(
+        data=ideal_dcg_lookup[calibrated_relevant_counts.values - 1],
+        index=calibrated_relevant_counts.index,
+    )
+
+    # Missing DCG users are treated as zero-hit users.
+    normalized_dcg_per_user = dcg_per_user.reindex(ideal_dcg_per_user.index).div(ideal_dcg_per_user, fill_value=0.0)
+    return float(normalized_dcg_per_user.mean())
+
