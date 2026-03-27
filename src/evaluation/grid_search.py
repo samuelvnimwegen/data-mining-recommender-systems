@@ -143,10 +143,10 @@ class RecommenderGridSearch:
         self.search_config: GridSearchConfig = search_config
 
     def run(
-            self,
-            train_dataframe: pd.DataFrame,
-            validation_dataframe: pd.DataFrame,
-            movies_dataframe: pd.DataFrame,
+        self,
+        train_dataframe: pd.DataFrame,
+        validation_dataframe: pd.DataFrame,
+        movies_dataframe: pd.DataFrame,
     ) -> list[ModelGridSearchResult]:
         """Run the grid search for all requested models.
 
@@ -195,11 +195,11 @@ class RecommenderGridSearch:
         return model_results
 
     def _run_model_grid(
-            self,
-            model_name: str,
-            train_dataframe: pd.DataFrame,
-            validation_dataframe: pd.DataFrame,
-            movies_dataframe: pd.DataFrame,
+        self,
+        model_name: str,
+        train_dataframe: pd.DataFrame,
+        validation_dataframe: pd.DataFrame,
+        movies_dataframe: pd.DataFrame,
     ) -> list[GridSearchTrialResult]:
         """Run the grid for a single model and return trial results.
 
@@ -266,8 +266,8 @@ class RecommenderGridSearch:
 
             # Optional cap: stop early when a maximum number of trials is set.
             if (
-                    self.search_config.maximum_trials_per_model is not None
-                    and trial_index >= self.search_config.maximum_trials_per_model
+                self.search_config.maximum_trials_per_model is not None
+                and trial_index >= self.search_config.maximum_trials_per_model
             ):
                 break
 
@@ -338,8 +338,8 @@ class RecommenderGridSearch:
 
     @staticmethod
     def _pick_best_trial(
-            trial_results: list[GridSearchTrialResult],
-            metric_name: str,
+        trial_results: list[GridSearchTrialResult],
+        metric_name: str,
     ) -> GridSearchTrialResult:
         """Pick the best trial from the list according to metric_name.
 

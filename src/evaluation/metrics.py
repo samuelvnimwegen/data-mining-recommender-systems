@@ -79,9 +79,7 @@ def calculate_precision_recall_at_k(
     """
     required_columns = {"userId", "true_rating", score_column_name}
     if not required_columns.issubset(set(predictions_dataframe.columns)):
-        raise ValueError(
-            f"predictions_dataframe must contain userId, true_rating and {score_column_name}."
-        )
+        raise ValueError(f"predictions_dataframe must contain userId, true_rating and {score_column_name}.")
     if number_of_recommendations <= 0:
         return 0.0, 0.0
     if predictions_dataframe.empty:
@@ -396,9 +394,7 @@ def calculate_ndcg_at_k(
     """
     required_columns = {"userId", "true_rating", score_column_name}
     if not required_columns.issubset(set(predictions_dataframe.columns)):
-        raise ValueError(
-            f"predictions_dataframe must contain userId, true_rating and {score_column_name}."
-        )
+        raise ValueError(f"predictions_dataframe must contain userId, true_rating and {score_column_name}.")
     if number_of_recommendations <= 0:
         return 0.0
     if predictions_dataframe.empty:
@@ -433,5 +429,3 @@ def calculate_ndcg_at_k(
     if not ndcg_values:
         return 0.0
     return float(np.mean(ndcg_values))
-
-

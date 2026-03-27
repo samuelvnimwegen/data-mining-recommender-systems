@@ -236,4 +236,3 @@ class RecommenderInferenceRouter:
         injected = list(model_recommendations[:number_of_recommendations])
         injected[-1] = fallback_item
         return injected
-

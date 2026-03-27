@@ -23,8 +23,7 @@ def _build_seen_movies_by_user(ratings_dataframe: pd.DataFrame) -> dict[int, set
 
     grouped_history_dataframe = normalized_ids_dataframe.groupby("userId")["movieId"].apply(set)
     return {
-        user_identifier: set(seen_movie_ids)
-        for user_identifier, seen_movie_ids in grouped_history_dataframe.items()
+        user_identifier: set(seen_movie_ids) for user_identifier, seen_movie_ids in grouped_history_dataframe.items()
     }
 
 
@@ -128,9 +127,7 @@ def test_lightfm_never_recommends_seen_history_movies(
             user_identifier=user_identifier,
             number_of_recommendations=10,
         )
-        recommended_movie_identifiers = {
-            recommendation_movie_id for recommendation_movie_id, _ in recommendations
-        }
+        recommended_movie_identifiers = {recommendation_movie_id for recommendation_movie_id, _ in recommendations}
 
         assert recommended_movie_identifiers.isdisjoint(seen_movie_identifiers)
 
