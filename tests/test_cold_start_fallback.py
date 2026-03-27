@@ -6,6 +6,7 @@ import pandas as pd
 
 from src.models.base_model import BaseModel
 from src.models.cold_start import BayesianColdStartRanker
+from src.models.cold_start import ColdStartRecommendation
 from src.models.inference_router import RecommenderInferenceRouter
 from src.models.svd_model import SVDModel
 
@@ -51,6 +52,62 @@ class _DummyModel(BaseModel):
         """
         _ = user_identifier
         return [(99, 5.0), (98, 4.9)][:number_of_recommendations]
+
+
+class _ScriptedColdStartRanker(BayesianColdStartRanker):
+    """Scripted ranker used to test injection edge cases."""
+
+    def __init__(self, candidate_movie_ids: list[int]) -> None:
+        """Stores deterministic candidate ids.
+
+        Args:
+            candidate_movie_ids: Fallback candidates in rank order.
+        """
+        super().__init__()
+        self.candidate_movie_ids = [int(movie_identifier) for movie_identifier in candidate_movie_ids]
+
+    def recommend(
+        self,
+        number_of_recommendations: int = 10,
+        exclude_movie_identifiers: set[int] | None = None,
+        preferred_genres: list[str] | None = None,
+        strategy_name: str = "blended",
+    ) -> list[ColdStartRecommendation]:
+        """Returns scripted rows while honoring exclude ids.
+
+        Args:
+            number_of_recommendations: Max rows to return.
+            exclude_movie_identifiers: Ids removed from output.
+            preferred_genres: Unused in this stub.
+            strategy_name: Unused in this stub.
+
+        Returns:
+            list[ColdStartRecommendation]: Scripted fallback rows.
+        """
+        _ = preferred_genres, strategy_name
+        excluded_ids = set(int(movie_identifier) for movie_identifier in (exclude_movie_identifiers or set()))
+        return [
+            ColdStartRecommendation(movie_identifier=int(movie_identifier), score_value=1.0)
+            for movie_identifier in self.candidate_movie_ids
+            if int(movie_identifier) not in excluded_ids
+        ][: int(number_of_recommendations)]
+
+    def infer_preferred_genres_from_history(
+        self,
+        seen_movie_identifiers: set[int],
+        max_genres: int = 3,
+    ) -> list[str]:
+        """Returns fixed preferences for router API compatibility.
+
+        Args:
+            seen_movie_identifiers: Unused in this stub.
+            max_genres: Unused in this stub.
+
+        Returns:
+            list[str]: Fixed genre list.
+        """
+        _ = seen_movie_identifiers, max_genres
+        return ["Action"]
 
 
 def test_bayesian_ranker_recommendations_exclude_seen_items() -> None:
@@ -190,3 +247,55 @@ def test_router_uses_popularity_coverage_fallback_for_svd_cold_start_user() -> N
 
     assert new_user_result.source_name == "cold_start_fallback:popular_genre_coverage"
     assert len(new_user_result.recommendations) == 3
+
+
+def test_router_injection_uses_non_duplicate_fallback_item() -> None:
+    """Checks injection picks a new fallback item when top fallback duplicates model output."""
+    ratings_dataframe = pd.DataFrame(
+        {
+            "userId": [1, 1, 1, 2],
+            "movieId": [10, 11, 12, 20],
+            "rating": [4.0, 4.5, 3.5, 5.0],
+        }
+    )
+
+    router = RecommenderInferenceRouter(
+        trained_model=_DummyModel(),
+        cold_start_ranker=_ScriptedColdStartRanker(candidate_movie_ids=[99, 77]),
+        ratings_dataframe=ratings_dataframe,
+        minimum_personalization_interactions=2,
+        heavy_user_interaction_threshold=3,
+        heavy_user_cold_start_injection_probability=1.0,
+        random_seed=42,
+    )
+
+    recommendation_result = router.recommend_for_user(user_identifier=1, number_of_recommendations=2)
+
+    assert recommendation_result.source_name == "personalized_model_with_cold_start_injection"
+    assert recommendation_result.recommendations == [(99, 5.0), (77, 1.0)]
+
+
+def test_router_threshold_blocks_injection_for_non_heavy_user() -> None:
+    """Checks high heavy-user threshold disables injection even with probability one."""
+    ratings_dataframe = pd.DataFrame(
+        {
+            "userId": [1, 1, 1, 2],
+            "movieId": [10, 11, 12, 20],
+            "rating": [4.0, 4.5, 3.5, 5.0],
+        }
+    )
+
+    router = RecommenderInferenceRouter(
+        trained_model=_DummyModel(),
+        cold_start_ranker=_ScriptedColdStartRanker(candidate_movie_ids=[77, 76]),
+        ratings_dataframe=ratings_dataframe,
+        minimum_personalization_interactions=2,
+        heavy_user_interaction_threshold=100,
+        heavy_user_cold_start_injection_probability=1.0,
+        random_seed=42,
+    )
+
+    recommendation_result = router.recommend_for_user(user_identifier=1, number_of_recommendations=2)
+
+    assert recommendation_result.source_name == "personalized_model"
+    assert recommendation_result.recommendations == [(99, 5.0), (98, 4.9)]

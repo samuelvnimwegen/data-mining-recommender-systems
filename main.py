@@ -424,4 +424,143 @@ def main(command_line_arguments: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # Keep None to use normal terminal CLI arguments.
+    command_line_arguments: list[str] | None = None
+
+    # Preset 1. Clean raw data with default feature setup.
+    # command_line_arguments = [
+    #     "--movies-csv", "data/raw/movies.csv",
+    #     "--ratings-csv", "data/raw/ratings_train.csv",
+    #     "--output-dir", "data/processed",
+    # ]
+
+    # Preset 2. Clean data and force strict profile checks.
+    # command_line_arguments = [
+    #     "--movies-csv", "data/raw/movies.csv",
+    #     "--ratings-csv", "data/raw/ratings_train.csv",
+    #     "--output-dir", "data/processed/notebook_demo",
+    #     "--strict-profile",
+    #     "--max-orphan-ratio", "0.05",
+    #     "--max-duplicate-ratio", "0.20",
+    # ]
+
+    # Preset 3. Clean data with tf-idf enabled and longer time decay.
+    # command_line_arguments = [
+    #     "--movies-csv", "data/raw/movies.csv",
+    #     "--ratings-csv", "data/raw/ratings_train.csv",
+    #     "--output-dir", "data/processed",
+    #     "--enable-tfidf",
+    #     "--half-life-days", "730",
+    # ]
+
+    # Preset 4. Task 1 evaluation with ItemKNN defaults.
+    # command_line_arguments = [
+    #     "--run-task1-evaluation",
+    #     "--model-name", "itemknn",
+    #     "--train-ratings-path", "data/processed/notebook_demo/ratings_train_split.csv",
+    #     "--validation-ratings-path", "data/processed/notebook_demo/ratings_validation_split.csv",
+    #     "--movies-features-path", "data/processed/movies_cleaned.csv",
+    #     "--top-n", "10",
+    #     "--relevance-threshold", "4.0",
+    #     "--minimum-user-interactions", "2",
+    # ]
+
+    # Preset 5. Task 1 evaluation with SVD tuned defaults.
+    # command_line_arguments = [
+    #     "--run-task1-evaluation",
+    #     "--model-name", "svd",
+    #     "--train-ratings-path", "data/processed/notebook_demo/ratings_train_split.csv",
+    #     "--validation-ratings-path", "data/processed/notebook_demo/ratings_validation_split.csv",
+    #     "--movies-features-path", "data/processed/movies_cleaned.csv",
+    #     "--top-n", "10",
+    #     "--relevance-threshold", "4.0",
+    #     "--minimum-user-interactions", "2",
+    # ]
+
+    # Preset 6. Task 1 evaluation with LightFM tuned defaults.
+    # command_line_arguments = [
+    #     "--run-task1-evaluation",
+    #     "--model-name", "lightfm",
+    #     "--train-ratings-path", "data/processed/notebook_demo/ratings_train_split.csv",
+    #     "--validation-ratings-path", "data/processed/notebook_demo/ratings_validation_split.csv",
+    #     "--movies-features-path", "data/processed/movies_cleaned.csv",
+    #     "--top-n", "10",
+    #     "--relevance-threshold", "4.0",
+    #     "--minimum-user-interactions", "2",
+    # ]
+
+    # Preset 7. Task 2 inference for one known user.
+    # command_line_arguments = [
+    #     "--run-task2-inference",
+    #     "--model-name", "svd",
+    #     "--train-ratings-path", "data/processed/ratings_train_cleaned.csv",
+    #     "--movies-features-path", "data/processed/movies_cleaned.csv",
+    #     "--target-user-id", "1",
+    #     "--top-n", "10",
+    #     "--minimum-user-interactions", "2",
+    # ]
+
+    # Preset 8. Task 2 inference for a cold-start user with genre hint.
+    # command_line_arguments = [
+    #     "--run-task2-inference",
+    #     "--model-name", "itemknn",
+    #     "--train-ratings-path", "data/processed/ratings_train_cleaned.csv",
+    #     "--movies-features-path", "data/processed/movies_cleaned.csv",
+    #     "--target-user-id", "999999",
+    #     "--top-n", "10",
+    #     "--minimum-user-interactions", "2",
+    #     "--preferred-genres", "Action,Comedy,Sci-Fi",
+    # ]
+
+    # Preset 9. Grid search all models with rmse selection.
+    # command_line_arguments = [
+    #     "--run-hyperparameter-search",
+    #     "--grid-models", "itemknn,svd,lightfm",
+    #     "--grid-selection-metric", "rmse_value",
+    #     "--train-ratings-path", "data/processed/notebook_demo/ratings_train_split.csv",
+    #     "--validation-ratings-path", "data/processed/notebook_demo/ratings_validation_split.csv",
+    #     "--movies-features-path", "data/processed/movies_cleaned.csv",
+    #     "--grid-output-dir", "data/processed/grid_search/main_cli_all_models",
+    # ]
+
+    # Preset 10. Grid search only Surprise models with ndcg selection.
+    # command_line_arguments = [
+    #     "--run-hyperparameter-search",
+    #     "--grid-models", "itemknn,svd",
+    #     "--grid-selection-metric", "ndcg_at_k",
+    #     "--grid-max-trials-per-model", "25",
+    #     "--top-n", "10",
+    #     "--relevance-threshold", "4.0",
+    #     "--train-ratings-path", "data/processed/notebook_demo/ratings_train_split.csv",
+    #     "--validation-ratings-path", "data/processed/notebook_demo/ratings_validation_split.csv",
+    #     "--movies-features-path", "data/processed/movies_cleaned.csv",
+    #     "--grid-output-dir", "data/processed/grid_search/main_cli_surprise_models",
+    # ]
+
+    # Preset 11. Fast grid search smoke test.
+    # command_line_arguments = [
+    #     "--run-hyperparameter-search",
+    #     "--grid-models", "svd",
+    #     "--grid-selection-metric", "ndcg_at_k",
+    #     "--grid-max-trials-per-model", "3",
+    #     "--train-ratings-path", "data/processed/notebook_demo/ratings_train_split.csv",
+    #     "--validation-ratings-path", "data/processed/notebook_demo/ratings_validation_split.csv",
+    #     "--movies-features-path", "data/processed/movies_cleaned.csv",
+    #     "--grid-output-dir", "data/processed/grid_search/main_cli_smoke_test",
+    # ]
+
+    # Preset 12. Task 1 and Task 2 in one run.
+    # command_line_arguments = [
+    #     "--run-task1-evaluation",
+    #     "--run-task2-inference",
+    #     "--model-name", "itemknn",
+    #     "--train-ratings-path", "data/processed/notebook_demo/ratings_train_split.csv",
+    #     "--validation-ratings-path", "data/processed/notebook_demo/ratings_validation_split.csv",
+    #     "--movies-features-path", "data/processed/movies_cleaned.csv",
+    #     "--target-user-id", "5",
+    #     "--top-n", "10",
+    #     "--relevance-threshold", "4.0",
+    #     "--minimum-user-interactions", "2",
+    # ]
+
+    raise SystemExit(main(command_line_arguments))

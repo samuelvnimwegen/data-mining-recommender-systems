@@ -24,6 +24,7 @@ class BaseModel(ABC):
             minimum_rating_value: Lower rating bound.
             maximum_rating_value: Upper rating bound.
         """
+        # Keep rating scale on the base class so all models share one contract.
         self.minimum_rating_value: float = minimum_rating_value
         self.maximum_rating_value: float = maximum_rating_value
 

@@ -26,11 +26,14 @@ def run_lightfm_demo(
     Returns:
         list[tuple[int, float]]: Ranked recommendations.
     """
+    # Load prepared csv files used by the LightFM wrapper.
     movies_dataframe = pd.read_csv(movies_csv_path)
     ratings_dataframe = pd.read_csv(ratings_csv_path)
 
+    # Train one model instance for this demo run.
     lightfm_model = LightFMHybridModel()
     lightfm_model.fit(ratings_dataframe=ratings_dataframe, movies_dataframe=movies_dataframe)
+    # Return top-N results for quick manual inspection.
     return lightfm_model.recommend_top_n(
         user_identifier=user_identifier,
         number_of_recommendations=number_of_recommendations,
@@ -43,6 +46,7 @@ def main() -> int:
     Returns:
         int: Exit code.
     """
+    # Resolve repository root from this file path.
     repository_root_path = Path(__file__).resolve().parent.parent.parent
     default_movies_csv_path = repository_root_path / "data" / "processed" / "movies_cleaned.csv"
     default_ratings_csv_path = repository_root_path / "data" / "processed" / "ratings_train_cleaned.csv"

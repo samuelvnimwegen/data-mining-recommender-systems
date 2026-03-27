@@ -36,6 +36,7 @@ class SVDModel(BaseModel):
         maximum_rating_value: float = 5.0,
     ) -> None:
         """Initializes model configuration and Surprise SVD."""
+        # Reuse shared rating-scale settings from BaseModel.
         super().__init__(
             minimum_rating_value=minimum_rating_value,
             maximum_rating_value=maximum_rating_value,
@@ -45,8 +46,10 @@ class SVDModel(BaseModel):
         self.learning_rate_all: float = learning_rate_all
         self.regularization_all: float = regularization_all
         self.random_seed: int = random_seed
+        # Keep trainset as None until fit is called.
         self.trainset: Trainset | None = None
 
+        # Build Surprise SVD with the configured hyperparameters.
         self.algorithm = SVD(
             n_factors=self.number_of_factors,
             n_epochs=self.number_of_epochs,
@@ -65,11 +68,13 @@ class SVDModel(BaseModel):
         """
         # Ignore movies_dataframe for pure Surprise SVD training.
         _ = movies_dataframe
+        # Convert pandas ratings to a Surprise trainset.
         self.trainset = build_trainset_from_dataframe(
             ratings_dataframe=ratings_dataframe,
             minimum_rating_value=self.minimum_rating_value,
             maximum_rating_value=self.maximum_rating_value,
         )
+        # Fit matrix factorization parameters.
         self.algorithm.fit(self.trainset)
 
     def predict_rating(self, user_identifier: int, movie_identifier: int) -> float:
@@ -85,9 +90,11 @@ class SVDModel(BaseModel):
         Raises:
             ValueError: If model was not fitted.
         """
+        # Block prediction calls before fit.
         if self.trainset is None:
             raise ValueError("SVDModel must be fitted before calling predict_rating.")
 
+        # Surprise expects raw ids as strings.
         prediction = self.algorithm.predict(str(user_identifier), str(movie_identifier), verbose=False)
         return float(prediction.est)
 
@@ -106,17 +113,21 @@ class SVDModel(BaseModel):
         """
         if self.trainset is None:
             raise ValueError("SVDModel must be fitted before calling recommend_top_n.")
+        # Return fast for empty top-N requests.
         if number_of_recommendations <= 0:
             return []
 
+        # Build a seen/unseen split for this user.
         raw_user_identifier = str(user_identifier)
         seen_inner_item_ids = get_seen_inner_item_ids(self.trainset, raw_user_identifier)
         unseen_raw_item_identifiers = build_unseen_raw_item_ids(self.trainset, seen_inner_item_ids)
 
+        # Score each unseen item and keep (movieId, score).
         prediction_tuples: list[tuple[int, float]] = []
         for raw_item_identifier in unseen_raw_item_identifiers:
             prediction = self.algorithm.predict(raw_user_identifier, raw_item_identifier, verbose=False)
             prediction_tuples.append((int(raw_item_identifier), float(prediction.est)))
 
+        # Sort by score so top-ranked items come first.
         prediction_tuples.sort(key=lambda recommendation_tuple: recommendation_tuple[1], reverse=True)
         return prediction_tuples[:number_of_recommendations]

@@ -55,6 +55,7 @@ class BayesianColdStartRanker:
         Raises:
             ValueError: If weights are invalid.
         """
+        # Validate simple weight invariants so later math is safe.
         if not 0.0 <= bayesian_weight <= 1.0:
             raise ValueError("bayesian_weight must be in [0.0, 1.0].")
         if not 0.0 <= genre_trend_weight <= 1.0:
@@ -64,10 +65,12 @@ class BayesianColdStartRanker:
         if not 0.0 <= prior_count_quantile <= 1.0:
             raise ValueError("prior_count_quantile must be in [0.0, 1.0].")
 
+        # Store weights for use during recommend calls.
         self.bayesian_weight: float = bayesian_weight
         self.genre_trend_weight: float = genre_trend_weight
         self.prior_count_quantile: float = prior_count_quantile
 
+        # These are set during fit().
         self._fitted_movie_scores_dataframe: pd.DataFrame | None = None
         self._movie_id_to_genres_map: dict[int, set[str]] = {}
 
@@ -81,34 +84,44 @@ class BayesianColdStartRanker:
         Raises:
             ValueError: If required columns are missing.
         """
+        # Validate minimal schema before any computation.
         self._validate_columns(ratings_dataframe=ratings_dataframe, movies_dataframe=movies_dataframe)
 
+        # Keep only the columns we need and coerce to numeric types.
         ratings_work_dataframe = ratings_dataframe[["movieId", "rating"]].copy()
         ratings_work_dataframe["movieId"] = pd.to_numeric(ratings_work_dataframe["movieId"], errors="coerce")
         ratings_work_dataframe["rating"] = pd.to_numeric(ratings_work_dataframe["rating"], errors="coerce")
+        # Drop rows that could not be coerced to valid ids or ratings.
         ratings_work_dataframe = ratings_work_dataframe.dropna(subset=["movieId", "rating"]).copy()
         ratings_work_dataframe["movieId"] = ratings_work_dataframe["movieId"].astype(int)
 
+        # Simplify movies dataframe to only id + genres and coerce ids.
         movies_work_dataframe = movies_dataframe[["movieId", "genres"]].copy()
         movies_work_dataframe["movieId"] = pd.to_numeric(movies_work_dataframe["movieId"], errors="coerce")
         movies_work_dataframe = movies_work_dataframe.dropna(subset=["movieId"]).copy()
         movies_work_dataframe["movieId"] = movies_work_dataframe["movieId"].astype(int)
+        # Ensure a string exists for missing genres to keep later code simple.
         movies_work_dataframe["genres"] = movies_work_dataframe["genres"].fillna("(no genres listed)").astype(str)
 
+        # Compute per-movie counts and means used for Bayesian smoothing.
         per_movie_stats_dataframe = ratings_work_dataframe.groupby("movieId").agg(
             ratings_count=("rating", "size"),
             ratings_mean=("rating", "mean"),
         )
         per_movie_stats_dataframe = per_movie_stats_dataframe.reset_index()
 
+        # Global mean rating used as the Bayesian prior mean.
         global_mean_rating = float(ratings_work_dataframe["rating"].mean())
+        # Use the configured quantile to set a prior count m for smoothing.
         prior_count = float(np.quantile(per_movie_stats_dataframe["ratings_count"], self.prior_count_quantile))
 
+        # Compute Bayesian estimate for each movie (smoothed mean).
         per_movie_stats_dataframe["bayesian_score"] = (
             per_movie_stats_dataframe["ratings_count"] * per_movie_stats_dataframe["ratings_mean"]
             + prior_count * global_mean_rating
         ) / (per_movie_stats_dataframe["ratings_count"] + prior_count)
 
+        # Build per-genre Bayesian scores using a helper.
         genre_scores = self._build_genre_scores(
             ratings_dataframe=ratings_work_dataframe,
             movies_dataframe=movies_work_dataframe,
@@ -116,39 +129,48 @@ class BayesianColdStartRanker:
             prior_count=prior_count,
         )
 
+        # Map movie ids to their genres and compute a genre-level score per movie.
         movie_id_to_genres_map: dict[int, set[str]] = {}
         genre_score_values: list[float] = []
         for movie_identifier, genres_value in movies_work_dataframe[["movieId", "genres"]].itertuples(
             index=False, name=None
         ):
+            # Normalize tokens to a set for stable lookups.
             genres_for_movie = self._normalize_genre_tokens(str(genres_value))
             movie_id_to_genres_map[int(movie_identifier)] = genres_for_movie
+            # If there are no genres, use global mean to avoid bias.
             if not genres_for_movie:
                 genre_score_values.append(global_mean_rating)
                 continue
+            # Average the per-genre scores to get a movie-level genre trend.
             genre_value_list = [genre_scores.get(genre_name, global_mean_rating) for genre_name in genres_for_movie]
             genre_score_values.append(float(np.mean(genre_value_list)))
 
         movies_work_dataframe["genre_trend_score"] = genre_score_values
 
+        # Merge movie-level Bayesian and genre scores into one table.
         score_dataframe = movies_work_dataframe.merge(
             per_movie_stats_dataframe[["movieId", "bayesian_score", "ratings_count"]],
             on="movieId",
             how="left",
         )
+        # Fill missing values with safe defaults so sorting does not break.
         score_dataframe["bayesian_score"] = score_dataframe["bayesian_score"].fillna(global_mean_rating)
         score_dataframe["ratings_count"] = score_dataframe["ratings_count"].fillna(0.0)
         score_dataframe["genre_trend_score"] = score_dataframe["genre_trend_score"].fillna(global_mean_rating)
 
+        # Normalize both signals to [0, 1] so weights are meaningful.
         score_dataframe["bayesian_norm"] = self._min_max_normalize(score_dataframe["bayesian_score"])
         score_dataframe["genre_norm"] = self._min_max_normalize(score_dataframe["genre_trend_score"])
 
+        # Combine the normalized signals using configured weights.
         combined_weight = self.bayesian_weight + self.genre_trend_weight
         score_dataframe["combined_score"] = (
             self.bayesian_weight * score_dataframe["bayesian_norm"]
             + self.genre_trend_weight * score_dataframe["genre_norm"]
         ) / combined_weight
 
+        # Keep only columns needed for fast recommendation calls.
         self._fitted_movie_scores_dataframe = score_dataframe[
             ["movieId", "combined_score", "bayesian_score", "ratings_count"]
         ].copy()
@@ -176,13 +198,17 @@ class BayesianColdStartRanker:
         Raises:
             ValueError: If ranker is not fitted or strategy is unknown.
         """
+        # Ensure the ranker was fitted before calling recommend.
         if self._fitted_movie_scores_dataframe is None:
             raise ValueError("BayesianColdStartRanker must be fitted before recommend calls.")
+        # Handle trivial no-op requests.
         if number_of_recommendations <= 0:
             return []
 
+        # Copy to avoid mutating fitted table when applying filters.
         working_dataframe = self._fitted_movie_scores_dataframe.copy()
 
+        # Remove excluded movie ids (e.g., those the user already saw).
         if exclude_movie_identifiers:
             working_dataframe = working_dataframe[
                 ~working_dataframe["movieId"]
@@ -190,6 +216,7 @@ class BayesianColdStartRanker:
                 .isin(set(int(movie_id) for movie_id in exclude_movie_identifiers))
             ].copy()
 
+        # Dispatch to selected strategy to compute final top-N.
         if strategy_name == "blended":
             return self._recommend_with_blended_strategy(
                 working_dataframe=working_dataframe,
@@ -202,6 +229,7 @@ class BayesianColdStartRanker:
                 number_of_recommendations=number_of_recommendations,
             )
 
+        # Unknown strategy names should fail early and loudly.
         raise ValueError(f"Unsupported cold-start strategy_name: {strategy_name}")
 
     def _recommend_with_blended_strategy(
@@ -220,6 +248,7 @@ class BayesianColdStartRanker:
         Returns:
             list[ColdStartRecommendation]: Ranked recommendations.
         """
+        # If the user gave genre hints, gently boost matching movies.
         if preferred_genres:
             normalized_preferences = {
                 genre_name.strip().lower() for genre_name in preferred_genres if genre_name.strip()
@@ -227,11 +256,14 @@ class BayesianColdStartRanker:
             if normalized_preferences:
                 preference_boost_values: list[float] = []
                 for movie_identifier in working_dataframe["movieId"].astype(int).tolist():
+                    # Map movie id to its genre tokens.
                     movie_genres = {
                         genre_name.lower() for genre_name in self._movie_id_to_genres_map.get(movie_identifier, set())
                     }
+                    # Count overlap to form a simple boost signal.
                     overlap_size = len(movie_genres.intersection(normalized_preferences))
                     preference_boost_values.append(float(overlap_size))
+                # Normalize boost to [0,1] so it blends well with combined_score.
                 working_dataframe["preference_boost"] = self._min_max_normalize(
                     pd.Series(preference_boost_values, index=working_dataframe.index)
                 )
@@ -240,11 +272,13 @@ class BayesianColdStartRanker:
                     0.9 * working_dataframe["combined_score"] + 0.1 * working_dataframe["preference_boost"]
                 )
 
+        # Sort by combined score then fall back to bayesian and counts for tie-breaks.
         working_dataframe = working_dataframe.sort_values(
             ["combined_score", "bayesian_score", "ratings_count", "movieId"],
             ascending=[False, False, False, True],
         )
 
+        # Take the top-K rows and convert them into result dataclass instances.
         recommendation_rows = working_dataframe.head(number_of_recommendations)
         return [
             ColdStartRecommendation(
@@ -288,6 +322,7 @@ class BayesianColdStartRanker:
         # First pass: keep only popular items that add a new genre when possible.
         for movie_identifier in candidate_movie_identifiers:
             movie_genres = self._movie_id_to_genres_map.get(int(movie_identifier), set())
+            # Skip items that do not add new genre coverage.
             if movie_genres and movie_genres.issubset(covered_genres):
                 continue
             selected_movie_identifiers.append(int(movie_identifier))
@@ -307,6 +342,7 @@ class BayesianColdStartRanker:
                 if len(selected_movie_identifiers) >= number_of_recommendations:
                     break
 
+        # Use ratings_count as an easy score to return for this popularity strategy.
         score_map = {
             int(movie_identifier): float(ratings_count)
             for movie_identifier, ratings_count in candidate_dataframe[["movieId", "ratings_count"]].itertuples(
@@ -374,22 +410,27 @@ class BayesianColdStartRanker:
         """
         genre_rows: list[tuple[str, float]] = []
 
+        # Build a movieId -> genres series for quick lookups.
         movie_id_to_genres_series = movies_dataframe.set_index("movieId")["genres"]
         for movie_identifier, rating_value in ratings_dataframe[["movieId", "rating"]].itertuples(
             index=False,
             name=None,
         ):
             movie_identifier_int = int(movie_identifier)
+            # Skip ratings for movies not present in movies table.
             if movie_identifier_int not in movie_id_to_genres_series.index:
                 continue
             genres_value = str(movie_id_to_genres_series.loc[movie_identifier_int])
             genre_tokens = self._normalize_genre_tokens(genres_value)
             for genre_name in genre_tokens:
+                # Append one row per genre per rating so we can aggregate later.
                 genre_rows.append((genre_name, float(rating_value)))
 
+        # If no genre data exists, return empty map.
         if not genre_rows:
             return {}
 
+        # Aggregate ratings per genre and apply same Bayesian smoothing.
         genre_dataframe = pd.DataFrame(genre_rows, columns=["genre", "rating"])
         genre_stats_dataframe = genre_dataframe.groupby("genre").agg(
             ratings_count=("rating", "size"),
@@ -417,6 +458,37 @@ class BayesianColdStartRanker:
         """
         minimum_value = float(value_series.min())
         maximum_value = float(value_series.max())
+        # When all values are equal, return ones to avoid divide-by-zero.
         if maximum_value <= minimum_value:
             return pd.Series(np.ones(len(value_series), dtype=float), index=value_series.index)
         return (value_series - minimum_value) / (maximum_value - minimum_value)
+
+    def infer_preferred_genres_from_history(
+        self,
+        seen_movie_identifiers: set[int],
+        max_genres: int = 3,
+    ) -> list[str]:
+        """Infers top genres from a user's seen movie history.
+
+        Args:
+            seen_movie_identifiers: Movie ids already seen by the user.
+            max_genres: Maximum number of genre names to return.
+
+        Returns:
+            list[str]: Top genre names sorted by frequency.
+        """
+        if not seen_movie_identifiers or max_genres <= 0:
+            return []
+
+        genre_count_map: dict[str, int] = {}
+        for movie_identifier in seen_movie_identifiers:
+            movie_genres = self._movie_id_to_genres_map.get(int(movie_identifier), set())
+            for genre_name in movie_genres:
+                genre_count_map[genre_name] = int(genre_count_map.get(genre_name, 0)) + 1
+
+        if not genre_count_map:
+            return []
+
+        # Sort by count descending, then by name for stable ties.
+        sorted_genres = sorted(genre_count_map.items(), key=lambda pair: (-pair[1], pair[0]))
+        return [genre_name for genre_name, _ in sorted_genres[:max_genres]]

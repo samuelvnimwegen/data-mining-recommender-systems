@@ -48,6 +48,7 @@ class LightFMFeatureInfluenceConfig:
             "recall_at_k",
             "ndcg_at_k",
         }
+        # Keep metric set small so score direction stays well-defined.
         if self.metric_name not in allowed_metric_names:
             raise ValueError(f"Unsupported metric_name: {self.metric_name}")
 
@@ -87,6 +88,7 @@ class LightFMFeatureInfluenceAnalyzer:
             pd.DataFrame: One row per feature with baseline, ablated score,
             signed influence score, and direction label.
         """
+        # Select only engineered feature columns used by the LightFM wrapper.
         feature_column_names = [
             column_name
             for column_name in movies_dataframe.columns
@@ -95,6 +97,7 @@ class LightFMFeatureInfluenceAnalyzer:
         if not feature_column_names:
             raise ValueError("No engineered feature columns found for influence analysis.")
 
+        # Evaluate full-feature model once as baseline.
         baseline_metric_value = self._evaluate_metric(
             train_dataframe=train_dataframe,
             validation_dataframe=validation_dataframe,
@@ -107,6 +110,7 @@ class LightFMFeatureInfluenceAnalyzer:
             # Zero one feature so all other signals stay unchanged.
             ablated_movies_dataframe[feature_column_name] = 0.0
 
+            # Re-evaluate after feature ablation.
             ablated_metric_value = self._evaluate_metric(
                 train_dataframe=train_dataframe,
                 validation_dataframe=validation_dataframe,
@@ -127,6 +131,7 @@ class LightFMFeatureInfluenceAnalyzer:
             )
 
         influence_dataframe = pd.DataFrame(row_values)
+        # Sort strongest helpful features to the top.
         return influence_dataframe.sort_values("influence_score", ascending=False, ignore_index=True)
 
     def _evaluate_metric(
@@ -145,6 +150,7 @@ class LightFMFeatureInfluenceAnalyzer:
         Returns:
             float: Metric value.
         """
+        # Build model with analyzer config so each run is comparable.
         model = LightFMHybridModel(
             number_of_components=self.influence_config.number_of_components,
             number_of_epochs=self.influence_config.number_of_epochs,
@@ -178,8 +184,10 @@ class LightFMFeatureInfluenceAnalyzer:
         Returns:
             float: Signed influence score.
         """
+        # For error metrics, lower is better, so invert subtraction.
         if self.influence_config.metric_name in {"rmse_value", "mae_value"}:
             return float(ablated_metric_value - baseline_metric_value)
+        # For ranking metrics, higher is better.
         return float(baseline_metric_value - ablated_metric_value)
 
     @staticmethod
@@ -192,6 +200,7 @@ class LightFMFeatureInfluenceAnalyzer:
         Returns:
             str: One of positive, negative, or neutral.
         """
+        # Use tiny tolerance to avoid float-noise direction flips.
         tolerance_value = 1e-12
         if influence_score > tolerance_value:
             return "positive"

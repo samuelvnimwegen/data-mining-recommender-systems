@@ -37,10 +37,12 @@ class CleanerConfig:
 
     def __post_init__(self) -> None:
         """Normalizes paths and validates numeric settings."""
+        # Convert incoming values to Path so downstream code is consistent.
         self.movies_csv_path = Path(self.movies_csv_path)
         self.ratings_csv_path = Path(self.ratings_csv_path)
         self.output_directory_path = Path(self.output_directory_path)
 
+        # Keep numeric settings in safe ranges.
         if self.time_decay_half_life_days <= 0:
             raise ValueError("time_decay_half_life_days must be greater than zero.")
         if not 0.0 <= self.max_orphan_ratio <= 1.0:
@@ -54,6 +56,7 @@ class CleanerConfig:
         Returns:
             dict[str, str]: A dictionary representation of the config with string values.
         """
+        # Return string values so logs and json dumps stay simple.
         return {
             "movies_csv_path": str(self.movies_csv_path),
             "ratings_csv_path": str(self.ratings_csv_path),

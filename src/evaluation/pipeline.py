@@ -93,6 +93,7 @@ class OfflineRecommenderEvaluator:
         Returns:
             EvaluationResult: Aggregated metric values.
         """
+        # Return a safe all-zero output for empty validation splits.
         if validation_dataframe.empty:
             return EvaluationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
@@ -128,6 +129,7 @@ class OfflineRecommenderEvaluator:
 
         predictions_dataframe = pd.DataFrame(prediction_rows)
 
+        # Rating-accuracy metrics use direct prediction rows.
         rmse_value = calculate_rmse(
             true_values=predictions_dataframe["true_rating"].tolist(),
             predicted_values=predictions_dataframe["predicted_rating"].tolist(),
@@ -149,6 +151,7 @@ class OfflineRecommenderEvaluator:
 
         recommendation_map: dict[int, list[int]] = {}
         for user_identifier in sorted(validation_dataframe["userId"].astype(int).unique().tolist()):
+            # Route through cold-start logic only when a router is provided.
             if inference_router is not None:
                 result = inference_router.recommend_for_user(
                     user_identifier=user_identifier,
@@ -162,6 +165,7 @@ class OfflineRecommenderEvaluator:
                 )
                 recommendation_map[user_identifier] = [movie_id for movie_id, _ in recommendations]
 
+        # Beyond-accuracy metrics use recommendation lists plus train context.
         movie_popularity_counts = (
             train_dataframe["movieId"].astype(int).value_counts().to_dict() if not train_dataframe.empty else {}
         )

@@ -87,6 +87,7 @@ def calculate_precision_recall_at_k(
     recall_values: list[float] = []
 
     for _, user_rows in predictions_dataframe.groupby("userId"):
+        # Rank by predicted score before slicing top-K.
         sorted_rows = user_rows.sort_values("predicted_rating", ascending=False)
         top_rows = sorted_rows.head(number_of_recommendations)
 
@@ -94,6 +95,7 @@ def calculate_precision_recall_at_k(
         total_relevant = int((user_rows["true_rating"] >= relevance_threshold).sum())
 
         precision_values.append(relevant_in_top / float(number_of_recommendations))
+        # Users with no relevant items contribute zero recall by design.
         if total_relevant == 0:
             recall_values.append(0.0)
         else:
@@ -126,6 +128,7 @@ def calculate_novelty_at_k(
     for movie_identifiers in recommendations_by_user.values():
         for movie_identifier in movie_identifiers:
             popularity_count = int(movie_popularity_counts.get(int(movie_identifier), 0))
+            # Clamp probability to avoid log2(0) for unseen items.
             probability_value = max(popularity_count / safe_total, 1.0 / safe_total)
             novelty_values.append(-math.log2(probability_value))
 
@@ -173,6 +176,7 @@ def _cosine_similarity(left_vector: np.ndarray, right_vector: np.ndarray) -> flo
     """
     left_norm = float(np.linalg.norm(left_vector))
     right_norm = float(np.linalg.norm(right_vector))
+    # Zero vectors have undefined cosine; return neutral similarity.
     if left_norm == 0.0 or right_norm == 0.0:
         return 0.0
     return float(np.dot(left_vector, right_vector) / (left_norm * right_norm))
@@ -228,6 +232,7 @@ def calculate_intra_list_similarity_at_k(
     user_similarity_values: list[float] = []
 
     for movie_identifiers in recommendations_by_user.values():
+        # Need at least one pair to measure within-list similarity.
         if len(movie_identifiers) < 2:
             continue
 
@@ -357,6 +362,7 @@ def _calculate_discounted_cumulative_gain(relevance_values: list[float]) -> floa
     """
     discounted_gain_value = 0.0
     for index_value, relevance_value in enumerate(relevance_values):
+        # Log discount reduces gain for lower-ranked items.
         discounted_gain_value += (2.0 ** float(relevance_value) - 1.0) / math.log2(index_value + 2.0)
     return discounted_gain_value
 
@@ -393,6 +399,7 @@ def calculate_ndcg_at_k(
     ndcg_values: list[float] = []
 
     for _, user_rows in predictions_dataframe.groupby("userId"):
+        # Rank items by predicted score and cut at K.
         sorted_rows = user_rows.sort_values("predicted_rating", ascending=False)
         top_rows = sorted_rows.head(number_of_recommendations)
 

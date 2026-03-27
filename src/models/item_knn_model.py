@@ -32,6 +32,7 @@ class ItemKNNModel(BaseModel):
         maximum_rating_value: float = 5.0,
     ) -> None:
         """Initializes model configuration and Surprise algorithm."""
+        # Reuse shared rating-scale settings from BaseModel.
         super().__init__(
             minimum_rating_value=minimum_rating_value,
             maximum_rating_value=maximum_rating_value,
@@ -39,6 +40,7 @@ class ItemKNNModel(BaseModel):
         self.number_of_neighbors: int = number_of_neighbors
         self.minimum_neighbors: int = minimum_neighbors
         self.similarity_name: str = similarity_name
+        # Keep trainset as None until fit is called.
         self.trainset: Trainset | None = None
 
         # Force item-based collaborative filtering.
@@ -58,11 +60,13 @@ class ItemKNNModel(BaseModel):
         """
         # Ignore movies_dataframe for pure Surprise KNN training.
         _ = movies_dataframe
+        # Convert pandas ratings to a Surprise trainset.
         self.trainset = build_trainset_from_dataframe(
             ratings_dataframe=ratings_dataframe,
             minimum_rating_value=self.minimum_rating_value,
             maximum_rating_value=self.maximum_rating_value,
         )
+        # Fit the KNN algorithm on all available ratings.
         self.algorithm.fit(self.trainset)
 
     def predict_rating(self, user_identifier: int, movie_identifier: int) -> float:
@@ -78,9 +82,11 @@ class ItemKNNModel(BaseModel):
         Raises:
             ValueError: If model was not fitted.
         """
+        # Block prediction calls before fit.
         if self.trainset is None:
             raise ValueError("ItemKNNModel must be fitted before calling predict_rating.")
 
+        # Surprise expects raw ids as strings.
         prediction = self.algorithm.predict(str(user_identifier), str(movie_identifier), verbose=False)
         return float(prediction.est)
 
@@ -99,17 +105,21 @@ class ItemKNNModel(BaseModel):
         """
         if self.trainset is None:
             raise ValueError("ItemKNNModel must be fitted before calling recommend_top_n.")
+        # Return fast for empty top-N requests.
         if number_of_recommendations <= 0:
             return []
 
+        # Build a seen/unseen split for this user.
         raw_user_identifier = str(user_identifier)
         seen_inner_item_ids = get_seen_inner_item_ids(self.trainset, raw_user_identifier)
         unseen_raw_item_identifiers = build_unseen_raw_item_ids(self.trainset, seen_inner_item_ids)
 
+        # Score each unseen item and keep (movieId, score).
         prediction_tuples: list[tuple[int, float]] = []
         for raw_item_identifier in unseen_raw_item_identifiers:
             prediction = self.algorithm.predict(raw_user_identifier, raw_item_identifier, verbose=False)
             prediction_tuples.append((int(raw_item_identifier), float(prediction.est)))
 
+        # Sort by score so top-ranked items come first.
         prediction_tuples.sort(key=lambda recommendation_tuple: recommendation_tuple[1], reverse=True)
         return prediction_tuples[:number_of_recommendations]
