@@ -113,15 +113,6 @@ It checks:
 
 Workflow file: `.github/workflows/ci.yml
 
-## Task 2 cold-start behavior
-
-The inference router uses this logic:
-
-- If a user has enough training interactions, return personalized recommendations from ItemKNN/SVD/LightFM.
-- If a user is unseen or has too little history, use a fallback ranking.
-- The fallback ranking blends Bayesian movie popularity and global genre trend scores.
-- Optional onboarding genres can slightly boost matching movies.
-
 ## Task 1 offline evaluation
 
 Evaluation helpers are in `src/evaluation/`:
@@ -159,6 +150,15 @@ python main.py \
   --top-n 10 \
   --preferred-genres "Sci-Fi,Action"
 ```
+
+## Task 2 cold-start behavior
+
+The inference router uses this logic:
+
+- If a user has enough training interactions, return personalized recommendations from ItemKNN/SVD/LightFM.
+- If a user is unseen or has too little history, use a fallback ranking.
+- The fallback ranking blends Bayesian movie popularity and global genre trend scores.
+- Optional onboarding genres can slightly boost matching movies.
 
 ## Task 2 outputs
 
@@ -227,5 +227,3 @@ python main.py \
 Artifacts are saved per model in the output directory:
 - `all_trials.csv`
 - `best_result.json`
-
-`
