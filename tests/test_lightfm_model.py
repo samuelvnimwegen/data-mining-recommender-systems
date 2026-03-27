@@ -133,3 +133,19 @@ def test_lightfm_never_recommends_seen_history_movies(
         }
 
         assert recommended_movie_identifiers.isdisjoint(seen_movie_identifiers)
+
+
+def test_lightfm_predict_score_and_calibrated_rating(
+    ratings_dataframe: pd.DataFrame,
+    movies_feature_dataframe: pd.DataFrame,
+) -> None:
+    """Checks LightFM exposes raw score and calibrated rating predictions."""
+    lightfm_model = LightFMHybridModel(number_of_components=8, number_of_epochs=8, random_seed=7)
+    lightfm_model.fit(ratings_dataframe=ratings_dataframe, movies_dataframe=movies_feature_dataframe)
+
+    predicted_score_value = lightfm_model.predict_score(user_identifier=1, movie_identifier=4)
+    predicted_rating_value = lightfm_model.predict_rating(user_identifier=1, movie_identifier=4)
+
+    assert isinstance(predicted_score_value, float)
+    assert isinstance(predicted_rating_value, float)
+    assert lightfm_model.minimum_rating_value <= predicted_rating_value <= lightfm_model.maximum_rating_value

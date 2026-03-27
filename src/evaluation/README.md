@@ -15,8 +15,12 @@ Implemented modules
   - `calculate_rmse`
   - `calculate_mae`
   - `calculate_precision_recall_at_k`
+  - `calculate_ndcg_at_k`
   - `calculate_novelty_at_k`
   - `calculate_diversity_at_k`
+  - `calculate_item_coverage_at_k`
+  - `calculate_intra_list_similarity_at_k`
+  - `calculate_item_to_history_distance_at_k`
   - `calculate_serendipity_at_k`
 - `src/evaluation/pipeline.py`
   - `OfflineRecommenderEvaluator`
@@ -62,7 +66,8 @@ results = runner.run(train_dataframe, validation_dataframe, movies_dataframe)
 
 Notes
 
-- Precision@K and Recall@K are calculated from predicted ratings on validation rows.
+- RMSE and MAE are calculated from `predict_rating()` outputs.
+- Ranking metrics (Precision@K, Recall@K, NDCG@K) are ranked by model score; in the pipeline this is passed through a ranking view of predictions.
 - Novelty@K uses self-information from train-set item popularity.
 - Diversity@K uses pairwise cosine distance on one-hot genre vectors.
 - Serendipity@K measures how surprising recommendations are compared to each user's seen history.

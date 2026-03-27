@@ -108,6 +108,10 @@ class OfflineRecommenderEvaluator:
                     user_identifier=int(user_identifier),
                     movie_identifier=int(movie_identifier),
                 )
+                predicted_score = model.predict_score(
+                    user_identifier=int(user_identifier),
+                    movie_identifier=int(movie_identifier),
+                )
             except ValueError as error:
                 error_message = str(error).lower()
                 if "unknown user id" in error_message or "unknown movie id" in error_message:
@@ -120,6 +124,7 @@ class OfflineRecommenderEvaluator:
                     "movieId": int(movie_identifier),
                     "true_rating": float(true_rating),
                     "predicted_rating": float(predicted_rating),
+                    "predicted_score": float(predicted_score),
                 }
             )
 
@@ -138,13 +143,16 @@ class OfflineRecommenderEvaluator:
             true_values=predictions_dataframe["true_rating"].tolist(),
             predicted_values=predictions_dataframe["predicted_rating"].tolist(),
         )
+        ranking_predictions_dataframe = predictions_dataframe.copy()
+        ranking_predictions_dataframe["predicted_rating"] = ranking_predictions_dataframe["predicted_score"]
+
         precision_at_k, recall_at_k = calculate_precision_recall_at_k(
-            predictions_dataframe=predictions_dataframe,
+            predictions_dataframe=ranking_predictions_dataframe,
             number_of_recommendations=self.number_of_recommendations,
             relevance_threshold=self.relevance_threshold,
         )
         ndcg_at_k = calculate_ndcg_at_k(
-            predictions_dataframe=predictions_dataframe,
+            predictions_dataframe=ranking_predictions_dataframe,
             number_of_recommendations=self.number_of_recommendations,
             relevance_threshold=self.relevance_threshold,
         )

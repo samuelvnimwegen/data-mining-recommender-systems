@@ -7,7 +7,7 @@ Primary function
 Architectural purpose
 
 - Inherit from a `BaseModel` abstract class for structural consistency.
-- Ensure all models expose `fit()`, `predict_rating()`, and `recommend_top_n()`.
+- Ensure all models expose `fit()`, `predict_rating()`, `predict_score()`, and `recommend_top_n()`.
 
 Contents
 
@@ -39,5 +39,8 @@ Notes
 
 - Surprise wrappers use `scikit-surprise`.
 - LightFM hybrid model uses engineered `movies_dataframe` feature columns such as `genre_*`, `genre_tfidf_*`, and `release_year`.
+- LightFM now exposes two prediction paths:
+  - `predict_score()`: Raw LightFM ranking score.
+  - `predict_rating()`: Calibrated score mapped to explicit rating scale.
 - Recommendation outputs exclude already-seen movies for all wrappers.
 - LightFM may require Python < 3.12 in this environment due upstream build constraints.

@@ -143,10 +143,10 @@ class RecommenderGridSearch:
         self.search_config: GridSearchConfig = search_config
 
     def run(
-        self,
-        train_dataframe: pd.DataFrame,
-        validation_dataframe: pd.DataFrame,
-        movies_dataframe: pd.DataFrame,
+            self,
+            train_dataframe: pd.DataFrame,
+            validation_dataframe: pd.DataFrame,
+            movies_dataframe: pd.DataFrame,
     ) -> list[ModelGridSearchResult]:
         """Run the grid search for all requested models.
 
@@ -195,11 +195,11 @@ class RecommenderGridSearch:
         return model_results
 
     def _run_model_grid(
-        self,
-        model_name: str,
-        train_dataframe: pd.DataFrame,
-        validation_dataframe: pd.DataFrame,
-        movies_dataframe: pd.DataFrame,
+            self,
+            model_name: str,
+            train_dataframe: pd.DataFrame,
+            validation_dataframe: pd.DataFrame,
+            movies_dataframe: pd.DataFrame,
     ) -> list[GridSearchTrialResult]:
         """Run the grid for a single model and return trial results.
 
@@ -266,8 +266,8 @@ class RecommenderGridSearch:
 
             # Optional cap: stop early when a maximum number of trials is set.
             if (
-                self.search_config.maximum_trials_per_model is not None
-                and trial_index >= self.search_config.maximum_trials_per_model
+                    self.search_config.maximum_trials_per_model is not None
+                    and trial_index >= self.search_config.maximum_trials_per_model
             ):
                 break
 
@@ -286,26 +286,26 @@ class RecommenderGridSearch:
         if model_name == "itemknn":
             # Parameters map designed to match ItemKNNModel ctor defaults.
             grid_map: dict[str, list[int | float | str]] = {
-                "number_of_neighbors": [120],
-                "minimum_neighbors": [1],
-                "similarity_name": ["msd"],
+                "number_of_neighbors": [60, 120, 200],
+                "minimum_neighbors": [1, 5],
+                "similarity_name": ["msd", "cosine", "pearson"],
             }
         elif model_name == "svd":
             # Parameters map designed to match SVDModel ctor defaults.
             grid_map = {
-                "number_of_factors": [20],
-                "number_of_epochs": [10],
-                "learning_rate_all": [0.002],
-                "regularization_all": [0.02],
+                "number_of_factors": [20, 50],
+                "number_of_epochs": [10, 20],
+                "learning_rate_all": [0.002, 0.005],
+                "regularization_all": [0.02, 0.05],
                 "random_seed": [42],
             }
         elif model_name == "lightfm":
             # Parameters map designed to match LightFMHybridModel ctor defaults.
             grid_map = {
-                "number_of_components": [30],
-                "number_of_epochs": [32],
-                "learning_rate_value": [0.001],
-                "loss_name": ["bpr"],
+                "number_of_components": [16, 32, 48, 64],
+                "number_of_epochs": [15, 30, 45],
+                "learning_rate_value": [0.001, 0.005, 0.01],
+                "loss_name": ["warp", "bpr", "logistic"],
                 "random_seed": [42],
             }
         else:
@@ -338,8 +338,8 @@ class RecommenderGridSearch:
 
     @staticmethod
     def _pick_best_trial(
-        trial_results: list[GridSearchTrialResult],
-        metric_name: str,
+            trial_results: list[GridSearchTrialResult],
+            metric_name: str,
     ) -> GridSearchTrialResult:
         """Pick the best trial from the list according to metric_name.
 

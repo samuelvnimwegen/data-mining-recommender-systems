@@ -41,7 +41,12 @@ Settings are stored in `src/configs/config.py` in the `CleanerConfig` dataclass.
 - `notebooks/05_lightfm_usage.ipynb`: Shows LightFM hybrid training with engineered item features.
 - `notebooks/06_ratings_splitter_usage.ipynb`: Shows how to create and save the deterministic 70/30 train/validation split.
 - `notebooks/07_grid_search_usage.ipynb`: Runs hyperparameter grid search for ItemKNN, SVD, and LightFM.
-- `notebooks/08_task2_predictions_usage.ipynb`: Generates top-10 recommendations for each user in `data/raw/ratings_test.csv` and writes a filled submission CSV.
+- `notebooks/08_predictions_usage.ipynb`: General Task 2 prediction export demo with model selection.
+- `notebooks/09_lightfm_feature_importance_usage.ipynb`: LightFM feature influence analysis.
+- `notebooks/10_cold_start_popularity_coverage_usage.ipynb`: Cold-start popularity and coverage analysis.
+- `notebooks/11_model_comparison_all_metrics_usage.ipynb`: Full model comparison across all metrics.
+- `notebooks/12_cold_start_vs_normal_metrics_usage.ipynb`: Compare routed vs non-routed inference behavior.
+- `notebooks/13_svd_predictions_usage.ipynb`: SVD-focused final Task 2 export notebook.
 
 ## Report template
 
@@ -86,8 +91,12 @@ The inference router uses this logic:
 Evaluation helpers are in `src/evaluation/`:
 
 - Predictive accuracy: RMSE and MAE.
-- Ranking quality: Precision@K and Recall@K.
-- Beyond-accuracy: Novelty@K, Diversity@K, and Serendipity@K.
+- Ranking quality: Precision@K, Recall@K, and NDCG@K.
+- Beyond-accuracy: Novelty@K, Diversity@K, Coverage@K, IntraListSimilarity@K, ItemToHistoryDistance@K, and Serendipity@K.
+
+Evaluation behavior:
+- RMSE/MAE use `predict_rating()`.
+- Ranking metrics use model ranking scores (for LightFM this is `predict_score()`, while explicit models default to `predict_rating()`).
 
 Run evaluation from the CLI:
 
@@ -114,6 +123,13 @@ python main.py \
   --top-n 10 \
   --preferred-genres "Sci-Fi,Action"
 ```
+
+## Task 2 outputs
+
+Task 2 prediction notebooks now export two files:
+
+- `data/processed/ratings_test_filled.csv`: Recommended `movieId` values.
+- `data/processed/ratings_test_filled_titles.csv`: Same schema, but recommendation columns mapped to movie titles.
 
 ## Train/Validation splitting
 

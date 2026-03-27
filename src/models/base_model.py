@@ -49,6 +49,22 @@ class BaseModel(ABC):
             float: Predicted rating value.
         """
 
+    def predict_score(self, user_identifier: int, movie_identifier: int) -> float:
+        """Predicts a raw ranking score for one user-item pair.
+
+        Models that only support explicit rating prediction can keep the
+        default behavior, which reuses ``predict_rating``.
+
+        Args:
+            user_identifier: User id.
+            movie_identifier: Movie id.
+
+        Returns:
+            float: Raw score used for ranking.
+        """
+        # Keep backward compatibility for models without separate score logic.
+        return self.predict_rating(user_identifier=user_identifier, movie_identifier=movie_identifier)
+
     @abstractmethod
     def recommend_top_n(self, user_identifier: int, number_of_recommendations: int = 10) -> list[tuple[int, float]]:
         """Builds top-N movie recommendations for one user.

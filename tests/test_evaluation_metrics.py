@@ -110,6 +110,28 @@ def test_precision_recall_at_k_function() -> None:
     assert round(recall_value, 4) == 1.0
 
 
+def test_precision_recall_at_k_uses_custom_score_column() -> None:
+    """Checks precision and recall can rank by a separate score column."""
+    predictions_dataframe = pd.DataFrame(
+        {
+            "userId": [1, 1, 1, 2, 2],
+            "true_rating": [5.0, 4.0, 2.0, 5.0, 1.0],
+            "predicted_rating": [1.0, 1.0, 5.0, 1.0, 5.0],
+            "predicted_score": [4.9, 4.8, 4.7, 4.6, 4.5],
+        }
+    )
+
+    precision_value, recall_value = calculate_precision_recall_at_k(
+        predictions_dataframe=predictions_dataframe,
+        number_of_recommendations=2,
+        relevance_threshold=4.0,
+        score_column_name="predicted_score",
+    )
+
+    assert round(precision_value, 4) == 0.75
+    assert round(recall_value, 4) == 1.0
+
+
 def test_novelty_and_diversity_functions() -> None:
     """Checks beyond-accuracy metric helpers return positive values."""
     recommendations_by_user = {1: [1, 2], 2: [2, 3]}

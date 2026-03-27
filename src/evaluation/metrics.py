@@ -61,13 +61,15 @@ def calculate_precision_recall_at_k(
     predictions_dataframe: pd.DataFrame,
     number_of_recommendations: int = 10,
     relevance_threshold: float = 4.0,
+    score_column_name: str = "predicted_rating",
 ) -> tuple[float, float]:
     """Calculates averaged precision@K and recall@K from prediction rows.
 
     Args:
-        predictions_dataframe: Dataframe with userId, true_rating, predicted_rating.
+        predictions_dataframe: Dataframe with userId, true_rating, and score column.
         number_of_recommendations: K for top-K metrics.
         relevance_threshold: Minimum true rating for a relevant item.
+        score_column_name: Column used to rank items.
 
     Returns:
         tuple[float, float]: (precision_at_k, recall_at_k).
@@ -75,9 +77,11 @@ def calculate_precision_recall_at_k(
     Raises:
         ValueError: If required columns are missing.
     """
-    required_columns = {"userId", "true_rating", "predicted_rating"}
+    required_columns = {"userId", "true_rating", score_column_name}
     if not required_columns.issubset(set(predictions_dataframe.columns)):
-        raise ValueError("predictions_dataframe must contain userId, true_rating and predicted_rating.")
+        raise ValueError(
+            f"predictions_dataframe must contain userId, true_rating and {score_column_name}."
+        )
     if number_of_recommendations <= 0:
         return 0.0, 0.0
     if predictions_dataframe.empty:
@@ -87,8 +91,8 @@ def calculate_precision_recall_at_k(
     recall_values: list[float] = []
 
     for _, user_rows in predictions_dataframe.groupby("userId"):
-        # Rank by predicted score before slicing top-K.
-        sorted_rows = user_rows.sort_values("predicted_rating", ascending=False)
+        # Rank by model score before slicing top-K.
+        sorted_rows = user_rows.sort_values(score_column_name, ascending=False)
         top_rows = sorted_rows.head(number_of_recommendations)
 
         relevant_in_top = int((top_rows["true_rating"] >= relevance_threshold).sum())
@@ -371,6 +375,7 @@ def calculate_ndcg_at_k(
     predictions_dataframe: pd.DataFrame,
     number_of_recommendations: int = 10,
     relevance_threshold: float = 4.0,
+    score_column_name: str = "predicted_rating",
 ) -> float:
     """Calculates averaged NDCG@K from prediction rows.
 
@@ -378,9 +383,10 @@ def calculate_ndcg_at_k(
     to the threshold. Ratings below threshold become zero relevance.
 
     Args:
-        predictions_dataframe: Dataframe with userId, true_rating, predicted_rating.
+        predictions_dataframe: Dataframe with userId, true_rating, and score column.
         number_of_recommendations: K for top-K metric.
         relevance_threshold: Minimum rating that starts positive relevance.
+        score_column_name: Column used to rank items.
 
     Returns:
         float: Mean NDCG@K value.
@@ -388,9 +394,11 @@ def calculate_ndcg_at_k(
     Raises:
         ValueError: If required columns are missing.
     """
-    required_columns = {"userId", "true_rating", "predicted_rating"}
+    required_columns = {"userId", "true_rating", score_column_name}
     if not required_columns.issubset(set(predictions_dataframe.columns)):
-        raise ValueError("predictions_dataframe must contain userId, true_rating and predicted_rating.")
+        raise ValueError(
+            f"predictions_dataframe must contain userId, true_rating and {score_column_name}."
+        )
     if number_of_recommendations <= 0:
         return 0.0
     if predictions_dataframe.empty:
@@ -399,8 +407,8 @@ def calculate_ndcg_at_k(
     ndcg_values: list[float] = []
 
     for _, user_rows in predictions_dataframe.groupby("userId"):
-        # Rank items by predicted score and cut at K.
-        sorted_rows = user_rows.sort_values("predicted_rating", ascending=False)
+        # Rank items by model score and cut at K.
+        sorted_rows = user_rows.sort_values(score_column_name, ascending=False)
         top_rows = sorted_rows.head(number_of_recommendations)
 
         predicted_relevance_values = [
@@ -425,3 +433,5 @@ def calculate_ndcg_at_k(
     if not ndcg_values:
         return 0.0
     return float(np.mean(ndcg_values))
+
+

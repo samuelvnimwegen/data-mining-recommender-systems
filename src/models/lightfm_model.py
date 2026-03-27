@@ -50,7 +50,7 @@ class LightFMHybridModel(BaseModel):
         number_of_components: int = 30,
         number_of_epochs: int = 32,
         learning_rate_value: float = 0.001,
-        loss_name: str = "bpr",
+        loss_name: str = "logistic",
         random_seed: int = 42,
         minimum_rating_value: float = 0.5,
         maximum_rating_value: float = 5.0,
@@ -78,6 +78,9 @@ class LightFMHybridModel(BaseModel):
         self.user_id_to_index_map: dict[str, int] = {}
         self.item_id_to_index_map: dict[str, int] = {}
         self.index_to_item_id_map: dict[int, str] = {}
+        self._rating_calibration_slope: float = 1.0
+        self._rating_calibration_intercept: float = 0.0
+        self._global_mean_rating_value: float = 3.5
 
     def fit(self, ratings_dataframe: pd.DataFrame, movies_dataframe: pd.DataFrame | None = None) -> None:
         """Fits LightFM using ratings and engineered movie features.
@@ -133,16 +136,46 @@ class LightFMHybridModel(BaseModel):
         )
 
         self._build_reverse_maps()
+        self._fit_rating_calibration(ratings_dataframe=filtered_ratings_dataframe)
 
     def predict_rating(self, user_identifier: int, movie_identifier: int) -> float:
-        """Predicts one user-item score from the fitted LightFM model.
+        """Predicts one user-item rating using calibrated LightFM scores.
 
         Args:
             user_identifier: User id.
             movie_identifier: Movie id.
 
         Returns:
-            float: Predicted LightFM score.
+            float: Calibrated rating-scale prediction.
+
+        Raises:
+            ValueError: If model is not fitted or ids are unknown.
+        """
+        raw_score_value = self.predict_score(
+            user_identifier=user_identifier,
+            movie_identifier=movie_identifier,
+        )
+        calibrated_rating_value = (
+            self._rating_calibration_slope * float(raw_score_value) + self._rating_calibration_intercept
+        )
+        # Keep predictions inside the explicit rating range.
+        return float(
+            np.clip(
+                calibrated_rating_value,
+                self.minimum_rating_value,
+                self.maximum_rating_value,
+            )
+        )
+
+    def predict_score(self, user_identifier: int, movie_identifier: int) -> float:
+        """Predicts one user-item raw LightFM score.
+
+        Args:
+            user_identifier: User id.
+            movie_identifier: Movie id.
+
+        Returns:
+            float: Raw score used for ranking.
 
         Raises:
             ValueError: If model is not fitted or ids are unknown.
@@ -371,3 +404,54 @@ class LightFMHybridModel(BaseModel):
         self.index_to_item_id_map = {
             item_index: raw_item_id for raw_item_id, item_index in self.item_id_to_index_map.items()
         }
+
+    def _fit_rating_calibration(self, ratings_dataframe: pd.DataFrame) -> None:
+        """Fits a linear map from raw scores to explicit rating scale.
+
+        Args:
+            ratings_dataframe: Ratings used during model fit.
+        """
+        if ratings_dataframe.empty:
+            self._rating_calibration_slope = 1.0
+            self._rating_calibration_intercept = 0.0
+            self._global_mean_rating_value = float((self.minimum_rating_value + self.maximum_rating_value) / 2.0)
+            return
+
+        self._global_mean_rating_value = float(ratings_dataframe["rating"].astype(float).mean())
+
+        raw_score_values: list[float] = []
+        true_rating_values: list[float] = []
+
+        for user_identifier, movie_identifier, true_rating_value in ratings_dataframe[
+            ["userId", "movieId", "rating"]
+        ].itertuples(index=False, name=None):
+            # Skip any row that no longer exists in model id maps.
+            try:
+                raw_score_value = self.predict_score(
+                    user_identifier=int(user_identifier),
+                    movie_identifier=int(movie_identifier),
+                )
+            except ValueError:
+                continue
+
+            raw_score_values.append(float(raw_score_value))
+            true_rating_values.append(float(true_rating_value))
+
+        if len(raw_score_values) < 2:
+            self._rating_calibration_slope = 0.0
+            self._rating_calibration_intercept = float(self._global_mean_rating_value)
+            return
+
+        score_variance_value = float(np.var(raw_score_values))
+        if score_variance_value <= 1e-12:
+            self._rating_calibration_slope = 0.0
+            self._rating_calibration_intercept = float(self._global_mean_rating_value)
+            return
+
+        slope_value, intercept_value = np.polyfit(
+            np.array(raw_score_values, dtype=float),
+            np.array(true_rating_values, dtype=float),
+            deg=1,
+        )
+        self._rating_calibration_slope = float(slope_value)
+        self._rating_calibration_intercept = float(intercept_value)
