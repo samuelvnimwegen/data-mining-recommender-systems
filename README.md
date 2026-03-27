@@ -2,18 +2,6 @@
 
 This project includes a dataset cleaning pipeline and recommender models based on Surprise and LightFM.
 
-## CI
-
-A GitHub Actions workflow runs on every push to `main` and every pull request.
-
-It checks:
-
-- `ruff format --check .`
-- `ruff check .`
-- `pytest -q`
-
-Workflow file: `.github/workflows/ci.yml`
-
 ## What it does
 
 - Validates movie and rating CSV schemas.
@@ -48,9 +36,45 @@ Settings are stored in `src/configs/config.py` in the `CleanerConfig` dataclass.
 - `notebooks/12_cold_start_vs_normal_metrics_usage.ipynb`: Compare routed vs non-routed inference behavior.
 - `notebooks/13_svd_predictions_usage.ipynb`: SVD-focused final Task 2 export notebook.
 
-## Report template
 
-- `assignment2_report_latex.txt`: LaTeX report template for Task 1 and Task 2 write-up.
+## Install
+
+The project uses `pyproject.toml` for dependency metadata. Two convenient ways to install the project and its dependencies are shown below.
+
+1) Install into a virtual environment using pip (recommended):
+
+```bash
+# From the project root
+python -m venv .venv
+source .venv/bin/activate  # use .venv\Scripts\activate on Windows
+pip install --upgrade pip setuptools wheel
+pip install -e .
+```
+
+
+Notes and build hints
+
+- Python version: the project requires Python 3.10+ (the ruff config targets py312 but the code runs on 3.10+). Use the same Python interpreter used for running notebooks.
+- LightFM builds C extensions and sometimes requires system build tools. On Ubuntu/WSL install:
+
+```bash
+sudo apt update && sudo apt install -y build-essential libatlas-base-dev liblapack-dev gfortran
+```
+
+- If `pip install -e .` fails while compiling `lightfm`, try installing it via the repo URL (already declared in `pyproject.toml`) or install a pre-built binary wheel where available:
+
+```bash
+pip install "lightfm @ git+https://github.com/daviddavo/lightfm"
+```
+
+- For CI and linting, `ruff` and `pytest` are declared as regular dependencies in the `pyproject.toml` to keep the dev environment simple; you may prefer to install dev tools globally or via a dedicated dev environment.
+
+Troubleshooting
+
+- If you get import errors for compiled packages, ensure the Python interpreter's architecture matches any pre-built wheels and that wheel building toolchain (gcc, g++) is available.
+- If memory or timeouts occur while running grid search or LightFM training, reduce the number of epochs or trials in the notebook or grid search config.
+
+
 
 ## Quick run
 
@@ -76,6 +100,18 @@ Model wrappers are implemented in `src/models/`:
 - `src/models/lightfm_model.py`: Hybrid recommender (`LightFM`) using engineered item features.
 - `src/models/cold_start.py`: Bayesian fallback ranker for unseen or low-activity users.
 - `src/models/inference_router.py`: Conditional router that switches between personalized and fallback recommendations.
+
+## CI
+
+A GitHub Actions workflow runs on every push to `main` and every pull request.
+
+It checks:
+
+- `ruff format --check .`
+- `ruff check .`
+- `pytest -q`
+
+Workflow file: `.github/workflows/ci.yml
 
 ## Task 2 cold-start behavior
 
@@ -192,3 +228,4 @@ Artifacts are saved per model in the output directory:
 - `all_trials.csv`
 - `best_result.json`
 
+`
