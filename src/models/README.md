@@ -24,13 +24,13 @@ from src.models.item_knn_model import ItemKNNModel
 from src.models.lightfm_model import LightFMHybridModel
 from src.models.svd_model import SVDModel
 
-item_knn_model = ItemKNNModel(number_of_neighbors=40)
+item_knn_model = ItemKNNModel()
 item_knn_model.fit(ratings_dataframe)
 
-svd_model = SVDModel(number_of_factors=100, number_of_epochs=20)
+svd_model = SVDModel()
 svd_model.fit(ratings_dataframe)
 
-lightfm_model = LightFMHybridModel(number_of_components=32, number_of_epochs=30)
+lightfm_model = LightFMHybridModel()
 lightfm_model.fit(ratings_dataframe=ratings_dataframe, movies_dataframe=movies_feature_dataframe)
 lightfm_recommendations = lightfm_model.recommend_top_n(user_identifier=1, number_of_recommendations=10)
 ```

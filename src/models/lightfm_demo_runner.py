@@ -29,7 +29,7 @@ def run_lightfm_demo(
     movies_dataframe = pd.read_csv(movies_csv_path)
     ratings_dataframe = pd.read_csv(ratings_csv_path)
 
-    lightfm_model = LightFMHybridModel(number_of_components=16, number_of_epochs=15, random_seed=42)
+    lightfm_model = LightFMHybridModel()
     lightfm_model.fit(ratings_dataframe=ratings_dataframe, movies_dataframe=movies_dataframe)
     return lightfm_model.recommend_top_n(
         user_identifier=user_identifier,

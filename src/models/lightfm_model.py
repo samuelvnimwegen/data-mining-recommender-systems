@@ -47,10 +47,10 @@ class LightFMHybridModel(BaseModel):
 
     def __init__(
         self,
-        number_of_components: int = 32,
-        number_of_epochs: int = 30,
-        learning_rate_value: float = 0.05,
-        loss_name: str = "warp",
+        number_of_components: int = 30,
+        number_of_epochs: int = 32,
+        learning_rate_value: float = 0.001,
+        loss_name: str = "bpr",
         random_seed: int = 42,
         minimum_rating_value: float = 0.5,
         maximum_rating_value: float = 5.0,

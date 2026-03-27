@@ -284,29 +284,28 @@ class RecommenderGridSearch:
             list[dict[str, int | float | str]]: Parameter combinations.
         """
         if model_name == "itemknn":
-            # Parameters map designed to match ItemKNNModel ctor.
+            # Parameters map designed to match ItemKNNModel ctor defaults.
             grid_map: dict[str, list[int | float | str]] = {
-                "number_of_neighbors": [20, 40, 60, 80, 120],
-                "minimum_neighbors": [1, 2, 4],
-                "similarity_name": ["cosine", "msd", "pearson_baseline"],
+                "number_of_neighbors": [120],
+                "minimum_neighbors": [1],
+                "similarity_name": ["msd"],
             }
         elif model_name == "svd":
-            # Parameters map designed to match SVDModel ctor.
+            # Parameters map designed to match SVDModel ctor defaults.
             grid_map = {
-                "number_of_factors": [20, 50, 100, 150],
-                "number_of_epochs": [10, 20, 30],
-                "learning_rate_all": [0.002, 0.005, 0.01],
-                "regularization_all": [0.02, 0.05, 0.1],
+                "number_of_factors": [20],
+                "number_of_epochs": [10],
+                "learning_rate_all": [0.002],
+                "regularization_all": [0.02],
                 "random_seed": [42],
             }
         elif model_name == "lightfm":
-            # Parameters map designed to match LightFMHybridModel ctor.
-            # Keep losses that support weighted interactions in this pipeline.
+            # Parameters map designed to match LightFMHybridModel ctor defaults.
             grid_map = {
-                "number_of_components": [16, 32, 48, 64],
-                "number_of_epochs": [15, 30, 45],
-                "learning_rate_value": [0.01, 0.03, 0.05],
-                "loss_name": ["warp", "bpr"],
+                "number_of_components": [30],
+                "number_of_epochs": [32],
+                "learning_rate_value": [0.001],
+                "loss_name": ["bpr"],
                 "random_seed": [42],
             }
         else:

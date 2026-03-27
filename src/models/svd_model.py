@@ -27,9 +27,9 @@ class SVDModel(BaseModel):
 
     def __init__(
         self,
-        number_of_factors: int = 100,
-        number_of_epochs: int = 20,
-        learning_rate_all: float = 0.005,
+        number_of_factors: int = 20,
+        number_of_epochs: int = 10,
+        learning_rate_all: float = 0.002,
         regularization_all: float = 0.02,
         random_seed: int = 42,
         minimum_rating_value: float = 0.5,

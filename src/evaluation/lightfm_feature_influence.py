@@ -33,10 +33,10 @@ class LightFMFeatureInfluenceConfig:
     metric_name: str = "rmse_value"
     number_of_recommendations: int = 10
     relevance_threshold: float = 4.0
-    number_of_components: int = 32
-    number_of_epochs: int = 30
-    learning_rate_value: float = 0.05
-    loss_name: str = "warp"
+    number_of_components: int = 30
+    number_of_epochs: int = 32
+    learning_rate_value: float = 0.001
+    loss_name: str = "bpr"
     random_seed: int = 42
 
     def __post_init__(self) -> None:

@@ -25,9 +25,9 @@ class ItemKNNModel(BaseModel):
 
     def __init__(
         self,
-        number_of_neighbors: int = 40,
+        number_of_neighbors: int = 120,
         minimum_neighbors: int = 1,
-        similarity_name: str = "pearson_baseline",
+        similarity_name: str = "msd",
         minimum_rating_value: float = 0.5,
         maximum_rating_value: float = 5.0,
     ) -> None:
